@@ -774,9 +774,43 @@ async function bonDismiss(id){ try{ await api('updateReceipt',{bonId:id, status:
 /* ── VIEW: MEER (afsluiting, te coderen, regels, instellingen) ─ */
 let meerTab = cfg.apiUrl?'afsluiting':'instellingen';
 function vMeer(){
-  const tabs=[['afsluiting','🗓 Controles'],['coderen','❓ Te coderen'],['regels','🤖 Regels'],['instellingen','⚙️ Instellingen']];
+  const tabs=[['afsluiting','🗓 Controles'],['obaangifte','🧾 OB-aangifte'],['coderen','❓ Te coderen'],['regels','🤖 Regels'],['instellingen','⚙️ Instellingen']];
   $('#view').innerHTML=`<div class="seg">${tabs.map(([id,l])=>`<button class="${meerTab===id?'on':''}" onclick="meerTab='${id}';render()">${l}</button>`).join('')}</div><div id="meerBody"></div>`;
-  ({afsluiting:vAfsluiting, coderen:vCoderen, regels:vRegels, instellingen:vInstellingen}[meerTab])();
+  ({afsluiting:vAfsluiting, obaangifte:vObAangifte, coderen:vCoderen, regels:vRegels, instellingen:vInstellingen}[meerTab])();
+}
+
+/* — OB-aangifte-overzicht: per maand wat je moet aangeven (netto-mutatie van
+   1641/1642 díe maand — omzet-OB min wat er al via OB-import-verrekening of
+   Memoriaal-correcties vanaf is — niet de cumulatieve stand, die staat er ook
+   bij ter controle). */
+function vObAangifte(){
+  if(!D){ $('#meerBody').innerHTML='<div class="card">Eerst verbinden.</div>'; return; }
+  const m=wizMonth, mFrom=m+'-01', mTo=monthEnd(m);
+  const periodeLegs=legs(mFrom, mTo);
+  const mutatie=code=>R2(periodeLegs.filter(l=>l.code===code).reduce((a,l)=>a+l.deb*sgn(code),0));
+  const ob6=mutatie(1641), ob9=mutatie(1642);
+  const eind=saldi(mTo);
+  const obImportTag=`[OB-import ${m}]`;
+  const obImportGedaan=memoTagExists(obImportTag);
+  $('#meerBody').innerHTML=`
+  <div class="card"><h2>OB-aangifte · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select></h2>
+  <div class="step"><h3>Aan te geven deze periode (${monthName(m)})</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="l">OB 6%</div><div class="v">${fmt(ob6)}</div></div>
+      <div class="kpi"><div class="l">OB 9%</div><div class="v">${fmt(ob9)}</div></div>
+      <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(R2(ob6+ob9))}</div></div>
+    </div>
+    <p class="small mt">Dit is de netto-mutatie van 1641/1642 binnen deze maand — inclusief een eventuele
+    OB-import-verrekening die je deze maand al geboekt hebt.</p></div>
+  <div class="step"><h3>${obImportGedaan?'✅':'⚠️'} OB-import-verrekening (CCS-facturen)</h3>
+    <p class="small">${obImportGedaan?`${obImportTag} staat al in het memoriaal.`:`Nog niet gedaan voor ${monthName(m)} — vergeet niet eerst de CCS-facturen van deze maand te verrekenen via ➕ Invoer → OB-import, vóórdat je aangifte doet.`}</p></div>
+  <div class="step"><h3>Cumulatieve stand (ter controle, niet het aangiftebedrag)</h3>
+    <p class="small">1641 (6%) tot en met ${mTo}: <b>${fmt(eind[1641]||0)}</b> ·
+    1642 (9%) tot en met ${mTo}: <b>${fmt(eind[1642]||0)}</b></p>
+    <p class="small">Dit is alles wat ooit is opgebouwd minus wat al is afgedragen/verrekend — hoort
+    naar 0 te lopen na betaling van de aangifte via de bank (codeer die betaling in de bank-import
+    rechtstreeks op 1641/1642, net als bij 1417).</p></div>
+  </div>`;
 }
 
 /* — controles (was maandafsluiting-wizard; de boekingsstappen zijn vervallen
