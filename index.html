@@ -644,71 +644,34 @@ async function bonDismiss(id){ try{ await api('updateReceipt',{bonId:id, status:
 /* ── VIEW: MEER (afsluiting, te coderen, regels, instellingen) ─ */
 let meerTab = cfg.apiUrl?'afsluiting':'instellingen';
 function vMeer(){
-  const tabs=[['afsluiting','🗓 Maandafsluiting'],['coderen','❓ Te coderen'],['regels','🤖 Regels'],['instellingen','⚙️ Instellingen']];
+  const tabs=[['afsluiting','🗓 Controles'],['coderen','❓ Te coderen'],['regels','🤖 Regels'],['instellingen','⚙️ Instellingen']];
   $('#view').innerHTML=`<div class="seg">${tabs.map(([id,l])=>`<button class="${meerTab===id?'on':''}" onclick="meerTab='${id}';render()">${l}</button>`).join('')}</div><div id="meerBody"></div>`;
   ({afsluiting:vAfsluiting, coderen:vCoderen, regels:vRegels, instellingen:vInstellingen}[meerTab])();
 }
 
-/* — maandafsluiting wizard — */
+/* — controles (was maandafsluiting-wizard; de boekingsstappen zijn vervallen
+   nu POS/Bonbot/sportlessen alles live pushen — addSales/posClosure/invoiceOpen/
+   invoicePaid houden 1419/1417/8013 vanzelf schoon. Correcties gaan voortaan
+   rechtstreeks via ➕ Invoer → Memoriaal, niet via een wizard-knop hier.) — */
 function vAfsluiting(){
   if(!D){ $('#meerBody').innerHTML='<div class="card">Eerst verbinden.</div>'; return; }
   const m=wizMonth, eind=monthEnd(m), s=saldi(eind);
-  const cogsPct=Number((D.instellingen||{}).COGS_PCT)||0.6;
   // sluitingen-dekking
   const sluitDagen=new Set(); (D.memoriaal||[]).forEach(r=>{ const mm=String(r[1]).match(/\[Sluiting (\d{4}-\d{2}-\d{2})\]/); if(mm&&mm[1].startsWith(m)) sluitDagen.add(mm[1]); });
   const posDagen=new Set(); (D.transacties||[]).forEach(r=>{ const id=String(r[7]); const d=String(r[0]).slice(0,10); if(d.startsWith(m)&&/^(POS|WEB)~/.test(id)) posDagen.add(d); });
   const missend=[...posDagen].filter(d=>!sluitDagen.has(d)).sort();
-  // stappen
-  const done=t=>memoTagExists(t);
-  const tagOR=`[Op rekening ${m}]`, tagPV=`[Pin-vereffening ${m}]`, tagPR=`[Pretecho-reclass ${m}]`, tagCO=`[COGS ${m}]`;
-  const s1419=R2(s[1419]||0), s1417=R2(s[1417]||0), s1408=R2(s[1408]||0);
-  const w=wv(m+'-01', eind);
-  const omzet8017=R2(w.om[8017]||0);
-  const cogsSug=R2(cogsPct*omzet8017);
-  const step=(nr,titel,tag,body,kanBoeken)=>`<div class="step"><h3>${done(tag)?'✅':nr+'.'} ${titel} ${done(tag)?'<span class="badge done">geboekt</span>':''}</h3>${done(tag)?`<p class="small">${tag} staat al in het memoriaal.</p>`:body}</div>`;
+  const s1419=R2(s[1419]||0), s1417=R2(s[1417]||0);
   $('#meerBody').innerHTML=`
-  <div class="card"><h2>Maandafsluiting · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select></h2>
-  <div class="step"><h3>${missend.length?'⚠️':'✅'} 0. Dagsluitingen compleet?</h3>
+  <div class="card"><h2>Controles · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select></h2>
+  <div class="step"><h3>${missend.length?'⚠️':'✅'} Dagsluitingen compleet?</h3>
     <p class="small">${missend.length?`Verkoopdagen zonder sluiting: <b>${missend.map(d=>d.slice(8)).join(', ')}</b> — voer ze in via ➕ Invoer → Dagsluiting.`:`Alle ${sluitDagen.size} sluitingsdagen aanwezig.`}</p></div>
-  ${step(1,'Op rekening → 1408', tagOR, `
-    <p class="small">POS-omzet die niet via de betalingen is geïnd gaat van 1419 naar debiteuren. 1419 staat nu op <b>${fmt(s1419)}</b> per ${eind}. <i>Vervalt zodra de POS facturen via invoiceOpen/invoicePaid pusht — dan blijft 1419 vanzelf op 0.</i></p>
-    <label>Bedrag</label><input type="number" step="0.01" id="orBedrag" value="${Math.max(s1419,0).toFixed(2)}">
-    <button class="primary mt" onclick="wizBoek('${tagOR}','${eind}',[{c:1419,b:-num('orBedrag')},{c:1408,b:num('orBedrag')}])">Boek ${tagOR}</button>`)}
-  ${step(2,'Pin-vereffening', tagPV, `
-    <p class="small">Pinontvangsten boven closure-kaart: eerst 1408 vereffenen, restant = verloszorg-omzet 8010 (0%). 1417 staat op <b>${fmt(s1417)}</b>, 1408 op <b>${fmt(s1408)}</b>. <i>Vervalt zodra de POS invoicePaid (bron pin) pusht.</i></p>
-    <label>Pin boven closure (ƒ)</label><input type="number" step="0.01" id="pvBedrag" value="${Math.max(-s1417,0).toFixed(2)}">
-    <label>Waarvan vereffening 1408 (rest wordt 8010)</label><input type="number" step="0.01" id="pvDeb" value="${Math.min(Math.max(-s1417,0),Math.max(s1408,0)).toFixed(2)}">
-    <button class="primary mt" onclick="wizPin('${tagPV}','${eind}')">Boek ${tagPV}</button>`)}
-  ${step(3,'Pretecho-reclass 8017 → 8013', tagPR, `
-    <p class="small">Som excl. van 3D echo + 2D pretecho + Geslachtsbepaling deze maand (uit je POS-rapport).</p>
-    <label>Bedrag excl. (ƒ)</label><input type="number" step="0.01" id="prBedrag" value="0">
-    <button class="primary mt" onclick="wizBoek('${tagPR}','${eind}',[{c:8017,b:-num('prBedrag')},{c:8013,b:num('prBedrag')}])">Boek ${tagPR}</button>`)}
-  ${step(4,'COGS '+(cogsPct*100)+'% × winkelomzet', tagCO, `
-    <p class="small">Winkelomzet 8017 excl. deze maand (na reclass): <b>${fmt(omzet8017)}</b> → COGS-voorstel <b>${fmt(cogsSug)}</b>. ${done(tagPR)?'':'⚠️ Boek eerst de pretecho-reclass.'}</p>
-    <label>Bedrag</label><input type="number" step="0.01" id="coBedrag" value="${cogsSug.toFixed(2)}">
-    <button class="primary mt" onclick="wizBoek('${tagCO}','${eind}',[{c:7002,b:num('coBedrag')},{c:1406,b:-num('coBedrag')}])">Boek ${tagCO}</button>`)}
-  <div class="step"><h3>5. Eindcontroles</h3>
+  <div class="step"><h3>Standen</h3>
     <p class="small">Balansverschil: <b class="${Math.abs(balansverschil())<0.01?'pos':'neg'}">${fmt(balansverschil())}</b> (moet 0,00) ·
     1419: <b class="${Math.abs(s1419)<1?'pos':'warn'}">${fmt(s1419)}</b> ·
     1417: <b class="${Math.abs(s1417)<200?'pos':'warn'}">${fmt(s1417)}</b> (settle-lag van dagen is normaal) ·
-    OB-stand 1641+1642: <b>${fmt(R2((s[1641]||0)+(s[1642]||0)))}</b></p></div>
-  <div id="wizMsg"></div></div>`;
-}
-window.num = id => R2(Number(document.getElementById(id).value)||0);
-async function wizBoek(tag, datum, legs){
-  try{
-    const rows=legs.filter(l=>Math.abs(l.b)>=0.005).map(l=>({datum, omschrijving:tag, bedrag:l.b, code:l.c, opmerking:'maandafsluiting'}));
-    if(!rows.length) throw new Error('Bedrag is 0');
-    const som=R2(rows.reduce((a,r)=>a+r.bedrag*sgn(r.code),0));
-    if(Math.abs(som)>=0.01) throw new Error('Boeking niet in balans: Σ deb = '+fmt(som));
-    await api('addMemoriaal',{rows, tag});
-    toast(tag+' geboekt ✓'); await refresh();
-  }catch(e){ $('#wizMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
-}
-async function wizPin(tag, datum){
-  const X=num('pvBedrag'), X1=Math.min(num('pvDeb'),X), X2=R2(X-X1);
-  const legs=[{c:1417,b:X}]; if(X1) legs.push({c:1408,b:-X1}); if(X2) legs.push({c:8010,b:X2});
-  await wizBoek(tag, datum, legs);
+    OB-stand 1641+1642: <b>${fmt(R2((s[1641]||0)+(s[1642]||0)))}</b></p>
+    <p class="small">Correcties? Doe die rechtstreeks via ➕ Invoer → Memoriaal.</p></div>
+  </div>`;
 }
 
 /* — te coderen — */
