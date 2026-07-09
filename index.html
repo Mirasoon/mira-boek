@@ -322,11 +322,11 @@ function vDash(){
 /* ── VIEW: INVOER ───────────────────────────────────────────── */
 let invMode = localStorage.getItem('bkInvMode')||'uitgave';
 function vInvoer(){
-  const modes=[['uitgave','Uitgave'],['verkoop','Verkoop'],['sluiting','Dagsluiting'],['memo','Memoriaal']];
+  const modes=[['uitgave','Uitgave'],['verkoop','Verkoop'],['sluiting','Dagsluiting'],['memo','Memoriaal'],['loon','Loonjournaal']];
   $('#view').innerHTML = `
   <div class="seg">${modes.map(([id,l])=>`<button class="${invMode===id?'on':''}" onclick="invMode='${id}';localStorage.setItem('bkInvMode','${id}');render()">${l}</button>`).join('')}</div>
   <div class="card" id="invForm"></div>`;
-  ({uitgave:fUitgave, verkoop:fVerkoop, sluiting:fSluiting, memo:fMemo}[invMode])();
+  ({uitgave:fUitgave, verkoop:fVerkoop, sluiting:fSluiting, memo:fMemo, loon:fLoon}[invMode])();
 }
 function fUitgave(){
   $('#invForm').innerHTML = `
@@ -428,6 +428,97 @@ async function submitMemo(){
     toast('Memoriaal geboekt ✓'); memoRows=[]; Object.keys(picked).filter(k=>k.startsWith('m')).forEach(k=>delete picked[k]);
     refresh();
   }catch(e){ $('#mMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+/* — loonjournaalpost (C4-export salarisadministratie) —
+   Vaste kolommen: Code,Subcode,Omschrijving,Uren,Valuta,Debet,Credit,Begindatum,Einddatum.
+   Code is de rekening van de payroll-provider, hier 1-op-1 vertaald naar het
+   eigen rekeningschema. Bedrag = (Debet−Credit)×sgn(rekening) — zet de
+   traditionele debet/credit-CSV om naar dit systeem se present-termen (zelfde
+   trucje als de Σ deb-check hierboven, maar dan in omgekeerde richting). */
+const LOON_MAP = {
+  1800: 1667,  // Nettolonen -> Payroll liabilities – Salaries to be paid
+  1810: 1670,  // Te betalen Loonbelasting -> Payroll liabilities – Wage Tax
+  1829: 1665,  // Te betalen BVZ premie -> Payroll liabilities – BVZ
+  1830: 1663,  // Te betalen AOV/AWW premie -> Payroll liabilities – Aov/Aww
+  1831: 1664,  // Te betalen AVBZ premie -> Payroll liabilities – AVBZ
+  1832: 1668,  // Te betalen SVB premie -> Payroll liabilities – SVB
+  1840: 1666,  // Te betalen pensioenpremie -> Payroll liabilities – Pensioenpremie te betalen
+  1855: 1669,  // Te betalen vakantiegeld (netto) -> Payroll liabilities – Vakantiegeld
+  4000: 4006,  // Bruto lonen -> Payroll Expenses – Gross Salary
+  4001: 4015,  // Bruto vakantiegeld -> Payroll Expenses – Vakantiegeld bruto
+  4029: 4012,  // BVZ werkgeverspremie -> Payroll Expenses – Premium BVZ
+  4030: 4010,  // AOV/AWW werkgeverspremie -> Payroll Expenses – Premium Aov/Aww
+  4031: 4011,  // AVBZ werkgeverspremie -> Payroll Expenses – Premium AVBZ
+  4033: 4013,  // SVB OV werkgeverspremie -> Payroll Expenses – SVB premium
+  4040: 4009,  // Pensioenpremie bijdrage -> Payroll Expenses – Pensioenpremie
+  4051: 4007,  // Onbelaste KM-vergoeding -> Payroll Expenses – KM vergoeding
+};
+let loonCtx=null;
+function fLoon(){
+  $('#invForm').innerHTML=`
+  <h2>Loonjournaalpost</h2>
+  <p class="small">Upload de maandelijkse C4-loonjournaalpost-export van de salarisadministratie. Onbekende regelcodes worden hier gevraagd, net als bij "Te coderen". Idempotent per maand-tag.</p>
+  <label>CSV-bestand</label><input type="file" accept=".csv,.txt" onchange="loonFile(this.files[0])">
+  <div id="loonBody" class="mt"></div>`;
+  if(loonCtx) loonRenderPreview();
+}
+function loonFile(file){
+  if(!file) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const rows=parseCSV(String(rd.result));
+    const hdrIdx=rows.findIndex(r=>String(r[0]).trim()==='Code');
+    if(hdrIdx<0||rows.length<hdrIdx+2){ toast('Herken dit CSV-formaat niet — verwacht een kolom "Code"'); return; }
+    const data=rows.slice(hdrIdx+1).filter(r=>r[0]&&r[0]!=='Totalen');
+    const maand=(data[0]?.[7]||'').slice(0,7);
+    if(!maand){ toast('Geen begindatum gevonden'); return; }
+    const items=data.map(r=>{
+      const bronCode=Number(r[0]), oms=String(r[2]||'').trim();
+      const debet=parseAmt(r[5])||0, credit=parseAmt(r[6])||0;
+      const code=LOON_MAP[bronCode]||null;
+      return {bronCode, oms, debet, credit, code};
+    });
+    loonCtx={maand, items, fname:file.name};
+    loonRenderPreview();
+  };
+  rd.readAsText(file);
+}
+function loonPick(i){
+  pickerTarget='loon'+i; pickerFilter=null; openPicker('loon'+i);
+  const iv=setInterval(()=>{ if(picked['loon'+i]){ loonCtx.items[i].code=picked['loon'+i]; delete picked['loon'+i]; clearInterval(iv); loonRenderPreview(); } if(!$('#pickerPop')) clearInterval(iv); },200);
+}
+function loonRenderPreview(){
+  const tag=`[Loon ${loonCtx.maand}]`;
+  const onbekend=loonCtx.items.filter(x=>!x.code).length;
+  const rows=loonCtx.items.map((x,i)=>{
+    const bedrag=x.code?R2((x.debet-x.credit)*sgn(x.code)):0;
+    return `<tr><td>${x.bronCode}<br><span class="small">${esc(x.oms.slice(0,32))}</span></td>
+    <td class="num">${fmt(x.debet||0)} / ${fmt(x.credit||0)}</td>
+    <td>${x.code?`<button style="padding:4px 8px;font-size:13px" onclick="loonPick(${i})">${x.code} ${esc(nameOf(x.code).slice(0,20))}</button>`
+                :`<button class="warn" style="padding:4px 8px;font-size:13px" onclick="loonPick(${i})">❓ kies rekening</button>`}</td>
+    <td class="num">${fmt(bedrag)}</td></tr>`;
+  }).join('');
+  const som=R2(loonCtx.items.reduce((a,x)=>a+(x.code?(x.debet-x.credit):0),0));
+  const done=memoTagExists(tag);
+  $('#loonBody').innerHTML=`<h3>${esc(loonCtx.fname)} · periode ${loonCtx.maand}</h3>
+  ${done?`<p class="msg ok">${tag} staat al in het memoriaal.</p>`:`
+  <div style="overflow:auto;max-height:50vh"><table><tr><th>Rekening (bron)</th><th class="num">Debet / Credit</th><th>→ Mirasoon-rekening</th><th class="num">Bedrag</th></tr>${rows}</table></div>
+  <div class="msg ${onbekend?'warn':(Math.abs(som)<0.01?'ok':'warn')} mt">
+    ${onbekend?`⚠️ ${onbekend} regel(s) nog zonder rekening — kies die eerst.`:`Σ deb = ${fmt(som)} ${Math.abs(som)<0.01?'✓ in balans':'→ moet 0,00 zijn'}`}</div>
+  <div id="loonMsg"></div>
+  <button class="primary mt" style="width:100%" onclick="loonSubmit()" ${onbekend||Math.abs(som)>=0.01?'disabled':''}>Boek ${tag}</button>`}`;
+}
+async function loonSubmit(){
+  try{
+    const tag=`[Loon ${loonCtx.maand}]`;
+    const datum=loonCtx.maand+'-01';
+    const rows=loonCtx.items.map(x=>({
+      datum, omschrijving:`${tag} ${x.oms}`, bedrag:R2((x.debet-x.credit)*sgn(x.code)), code:x.code, opmerking:'loonjournaal',
+    }));
+    await api('addMemoriaal',{rows, tag});
+    toast(tag+' geboekt ✓'); loonCtx=null; refresh();
+  }catch(e){ $('#loonMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
 }
 
 /* ── rekening-picker ────────────────────────────────────────── */
