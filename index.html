@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mirasoon Boekhouding</title>
+<meta name="theme-color" content="#0f766e">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Boekhouding">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f5f4; --card:#ffffff; --ink:#1a2421; --mut:#5f6f6a; --line:#e3e7e5;
+  --brand:#0f766e; --brand-ink:#ffffff; --soft:#e6f2f0;
+  --pos:#0f766e; --neg:#b4232a; --warn:#a15c00; --warnbg:#fdf3e2;
+  --c1:#0f766e; --c2:#b45309; --c3:#5b5bd6; --c4:#b4236e; --c5:#3a7d2c; --c6:#64748b;
+  --r:14px; --shadow:0 1px 3px rgba(20,40,35,.08);
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#101413; --card:#1a201e; --ink:#e8edeb; --mut:#94a39e; --line:#2a332f;
+    --brand:#2dd4bf; --brand-ink:#06302b; --soft:#12302c; --pos:#2dd4bf; --neg:#f87171;
+    --warn:#fbbf24; --warnbg:#332a12; --c1:#2dd4bf; --c2:#f59e0b; --c3:#a5b4fc; --c4:#f472b6; --c5:#86efac; --c6:#94a3b8;
+    --shadow:none; }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);
+  padding-bottom:calc(64px + env(safe-area-inset-bottom));}
+header{position:sticky;top:0;z-index:20;background:var(--bg);padding:12px 16px 8px;display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--line)}
+header h1{font-size:18px;font-weight:700;flex:1}
+header .sub{font-size:12px;color:var(--mut);display:block;font-weight:400}
+button{font:inherit;border:0;border-radius:10px;cursor:pointer;background:var(--soft);color:var(--ink);padding:8px 12px}
+button.primary{background:var(--brand);color:var(--brand-ink);font-weight:600}
+button.ghost{background:transparent;color:var(--brand);font-weight:600}
+button:disabled{opacity:.45;cursor:default}
+main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--line);padding:14px;margin-bottom:12px}
+.card h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin-bottom:10px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;box-shadow:var(--shadow)}
+.kpi .l{font-size:12px;color:var(--mut)}
+.kpi .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:12px;color:var(--mut);margin-top:2px}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .warn{color:var(--warn)}
+.badge{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:2px 10px;background:var(--soft);color:var(--brand)}
+.badge.warn{background:var(--warnbg);color:var(--warn)}
+.badge.neg{background:rgba(180,35,42,.12);color:var(--neg)}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;z-index:30;
+  padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border-radius:0;padding:8px 0 6px;font-size:11px;color:var(--mut);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button .ic{font-size:20px;line-height:1}
+nav button.on{color:var(--brand);font-weight:700}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+input[type=checkbox]{width:auto}
+.row{display:flex;gap:10px}.row>*{flex:1;min-width:0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--mut);font-weight:600}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.list-item{display:flex;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line);align-items:center}
+.list-item:last-child{border-bottom:0}
+.list-item .grow{flex:1;min-width:0}
+.list-item .t{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-item .d{font-size:12px;color:var(--mut)}
+.amount{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:6px}
+.seg button{flex:1;border-radius:0;background:none;padding:9px 4px;font-size:13px;color:var(--mut)}
+.seg button.on{background:var(--brand);color:var(--brand-ink);font-weight:700}
+.msg{padding:10px 12px;border-radius:10px;font-size:14px;margin:10px 0}
+.msg.ok{background:var(--soft);color:var(--brand)}
+.msg.err{background:rgba(180,35,42,.12);color:var(--neg)}
+.msg.warn{background:var(--warnbg);color:var(--warn)}
+.step{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.step h3{font-size:15px;margin-bottom:4px}
+.step .done{float:right}
+.picker-pop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.picker-pop .inner{background:var(--card);width:100%;max-width:760px;max-height:82vh;border-radius:18px 18px 0 0;padding:14px;display:flex;flex-direction:column}
+.picker-pop .results{overflow:auto;margin-top:8px}
+.mono{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.small{font-size:12px;color:var(--mut)}
+.right{text-align:right}
+.mt{margin-top:10px}
+details summary{cursor:pointer;font-weight:600;padding:6px 0}
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  padding:10px 18px;border-radius:99px;font-size:14px;opacity:0;transition:opacity .25s;z-index:99;pointer-events:none;max-width:90vw;text-align:center}
+.spin{display:inline-block;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.bar-row{display:flex;align-items:flex-end;gap:6px;height:120px;margin:8px 0 2px}
+.bar-col{flex:1;display:flex;flex-direction:column-reverse;align-items:stretch;gap:1px}
+.bar-lab{display:flex;gap:6px}.bar-lab span{flex:1;text-align:center;font-size:11px;color:var(--mut)}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:12px;color:var(--mut)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<header>
+  <div style="flex:1">
+    <h1>Mirasoon Boekhouding <span class="sub" id="hdrSub">—</span></h1>
+  </div>
+  <button id="syncBtn" class="ghost" onclick="refresh(true)" title="Verversen">⟳</button>
+</header>
+<main id="view"></main>
+<nav id="nav"></nav>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════════
+   MIRASOON BOEKHOUDING PWA — engine volgt BOEKHOUDINGSYSTEEM_1.md
+   teken: Activa/Kosten/RC-DGA = +1 · Passiva/Eigen vermogen/Omzet = −1
+   saldo (present) = Σ deb × teken   (in Python geverifieerd)
+   ════════════════════════════════════════════════════════════════ */
+const SIGN = {'Activa':1,'Kosten':1,'RC-DGA':1,'Passiva':-1,'Eigen vermogen':-1,'Omzet':-1};
+const $ = s => document.querySelector(s);
+const esc = s => String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const R2 = x => Math.round((x + (x>=0?1e-9:-1e-9)) * 100) / 100;
+const fmt = x => (x<0?'−':'') + 'ƒ' + Math.abs(R2(x)).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmt0 = x => (x<0?'−':'') + 'ƒ' + Math.abs(Math.round(x)).toLocaleString('nl-NL');
+const today = () => new Date().toISOString().slice(0,10);
+const thisMonth = () => today().slice(0,7);
+const monthEnd = m => { const [y,mm]=m.split('-').map(Number); return `${m}-${String(new Date(y,mm,0).getDate()).padStart(2,'0')}`; };
+const monthName = m => { const [y,mm]=m.split('-'); return ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'][mm-1]+' '+y; };
+const djb2 = s => { let h=5381; for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0; return h.toString(36); };
+
+/* ── config & state ─────────────────────────────────────────── */
+let cfg = JSON.parse(localStorage.getItem('bkCfg')||'{}');   // {apiUrl, token, mapBank, mapCC}
+let D = null;          // {transacties, memoriaal, bonnen, beginbalans, schema, regels, instellingen}
+let schemaMap = {};    // code -> {naam, type}
+let curView = cfg.apiUrl ? 'dash' : 'meer';
+let dashMonth = thisMonth(), wizMonth = thisMonth();
+let importCtx = null;  // lopende CSV-import
+let recent = JSON.parse(localStorage.getItem('bkRecent')||'[]');
+
+function saveCfg(){ localStorage.setItem('bkCfg', JSON.stringify(cfg)); }
+function toast(msg, ms=2600){ const t=$('#toast'); t.textContent=msg; t.style.opacity=1; clearTimeout(t._h); t._h=setTimeout(()=>t.style.opacity=0, ms); }
+
+/* ── API ────────────────────────────────────────────────────── */
+async function api(action, payload){
+  if(!cfg.apiUrl || !cfg.token) throw new Error('Stel eerst API-URL en token in (Meer → Instellingen).');
+  const res = await fetch(cfg.apiUrl, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify({token:cfg.token, action, payload}) });
+  const out = await res.json();
+  if(!out.ok) throw new Error(out.error||'Onbekende fout');
+  return out;
+}
+async function refresh(manual){
+  const b=$('#syncBtn'); b.innerHTML='<span class="spin">⟳</span>';
+  try{
+    const out = await api('getAll', {});
+    D = out;
+    schemaMap = {}; D.schema.forEach(r=>schemaMap[Number(r[0])]={naam:r[1], type:String(r[2]).trim()});
+    localStorage.setItem('bkData', JSON.stringify(D));
+    $('#hdrSub').textContent = 'gegevens t/m ' + today();
+    if(manual) toast('Gegevens ververst');
+  }catch(e){
+    const cached = localStorage.getItem('bkData');
+    if(cached && !D){ D=JSON.parse(cached); schemaMap={}; D.schema.forEach(r=>schemaMap[Number(r[0])]={naam:r[1],type:String(r[2]).trim()}); $('#hdrSub').textContent='offline kopie'; }
+    toast('Sync mislukt: '+e.message, 4200);
+  }
+  b.textContent='⟳';
+  render();
+}
+
+/* ── ENGINE ─────────────────────────────────────────────────── */
+const typeOf = c => (schemaMap[Number(c)]||{}).type || 'Kosten';
+const nameOf = c => (schemaMap[Number(c)]||{}).naam || '';
+const sgn = c => SIGN[typeOf(c)] ?? 1;
+
+// Transactie-rij -> journaal-benen [{code, deb}]
+function expandTrans(r){
+  const [datum, oms, bedragRaw, codeRaw, pctRaw, obRaw, status, id] = r;
+  const bedrag = Number(bedragRaw)||0;
+  const code = (codeRaw===''||codeRaw==null) ? 9999 : Number(codeRaw);
+  const sid = String(id||'');
+  if(sid.startsWith('1003~')) return [{code:1003, deb:bedrag},{code, deb:-bedrag}];
+  if(sid.startsWith('1709~')) return [{code:1709, deb:bedrag},{code, deb:-bedrag}];
+  // POS~ / WEB~ / MAN~ : verkoop incl → clearing 1419
+  if(code===1720) return [{code:1720, deb:-bedrag},{code:1419, deb:bedrag}];
+  const pct = Number(pctRaw)||0;
+  const ob = (obRaw!==''&&obRaw!=null) ? Number(obRaw) : (pct>0 ? R2(bedrag - bedrag/(1+pct/100)) : 0);
+  const legs = [{code, deb:-(R2(bedrag-ob))}];
+  if(ob) legs.push({code: pct===9?1642:1641, deb:-ob});
+  legs.push({code:1419, deb:bedrag});
+  return legs;
+}
+const expandMemo = r => [{code:Number(r[3]), deb:(Number(r[2])||0) * sgn(r[3])}];
+
+// alle benen t/m datum (of binnen [from,to] als from gegeven)
+function legs(from, to){
+  const out=[];
+  const inR = d => { const s=String(d).slice(0,10); return (!from || s>=from) && (!to || s<=to); };
+  (D.transacties||[]).forEach(r=>{ if(inR(r[0])) expandTrans(r).forEach(l=>out.push({...l, datum:String(r[0]).slice(0,10)})); });
+  (D.memoriaal||[]).forEach(r=>{ if(inR(r[0])) expandMemo(r).forEach(l=>out.push({...l, datum:String(r[0]).slice(0,10)})); });
+  return out;
+}
+function beginSaldi(){
+  const m={};
+  (D.beginbalans||[]).forEach(r=>{ const c=Number(r[0]); if(!isNaN(c)&&r[2]!=='') m[c]=(m[c]||0)+Number(r[2]); });
+  return m;
+}
+// present saldi per code t/m 'to'
+function saldi(to){
+  const m = beginSaldi();
+  legs(null, to).forEach(l=>{ m[l.code]=(m[l.code]||0) + l.deb * sgn(l.code); });
+  Object.keys(m).forEach(k=>m[k]=R2(m[k]));
+  return m;
+}
+// W&V per periode: presents op Omzet/Kosten-codes uit benen binnen periode
+function wv(from, to){
+  const om={}, ko={};
+  legs(from, to).forEach(l=>{
+    const t=typeOf(l.code), v=l.deb*sgn(l.code);
+    if(t==='Omzet') om[l.code]=(om[l.code]||0)+v;
+    else if(t==='Kosten') ko[l.code]=(ko[l.code]||0)+v;
+  });
+  const sum=o=>R2(Object.values(o).reduce((a,b)=>a+b,0));
+  return {om, ko, omzet:sum(om), kosten:sum(ko), resultaat:R2(sum(om)-sum(ko))};
+}
+const balansverschil = () => R2(legs(null,null).reduce((a,l)=>a+l.deb,0));
+function matchRule(oms){
+  const up=String(oms).toUpperCase();
+  for(const r of (D.regels||[])) if(r[0] && up.includes(String(r[0]).toUpperCase())) return Number(r[1]);
+  return null;
+}
+function memoTagExists(tag){ return (D.memoriaal||[]).some(r=>String(r[1]).includes(tag)); }
+
+/* ── NAV & RENDER ───────────────────────────────────────────── */
+const VIEWS=[['dash','📊','Overzicht'],['invoer','➕','Invoer'],['import','📥','Import'],['bonnen','🧾','Bonnen'],['meer','⋯','Meer']];
+function nav(){
+  $('#nav').innerHTML = VIEWS.map(([id,ic,l])=>
+    `<button class="${curView===id?'on':''}" onclick="go('${id}')"><span class="ic">${ic}</span>${l}
+     ${id==='bonnen'&&openBonnen().length?`<span class="badge neg">${openBonnen().length}</span>`:''}</button>`).join('');
+}
+function go(v){ curView=v; render(); window.scrollTo(0,0); }
+const openBonnen = () => D ? (D.bonnen||[]).filter(b=>['Nieuw',''].includes(String(b[5]))) : [];
+function render(){
+  nav();
+  if(!D && curView!=='meer'){ $('#view').innerHTML = `<div class="card"><h2>Welkom</h2>
+    <p>Stel eerst de verbinding met je Google Sheet in.</p>
+    <button class="primary mt" onclick="go('meer')">Naar instellingen →</button></div>`; return; }
+  ({dash:vDash, invoer:vInvoer, import:vImport, bonnen:vBonnen, meer:vMeer}[curView])();
+}
+
+/* ── VIEW: DASHBOARD ────────────────────────────────────────── */
+function monthOptions(sel){
+  const start=(D.instellingen||{}).BOEKJAAR_START||'2026-07-01';
+  const out=[]; let m=start.slice(0,7); const now=thisMonth();
+  while(m<=now){ out.push(m); const [y,mm]=m.split('-').map(Number); m=mm===12?`${y+1}-01`:`${y}-${String(mm+1).padStart(2,'0')}`; }
+  return out.reverse().map(x=>`<option value="${x}" ${x===sel?'selected':''}>${monthName(x)}</option>`).join('');
+}
+function vDash(){
+  const s = saldi(null);
+  const start=(D.instellingen||{}).BOEKJAAR_START||'2026-07-01';
+  const ytd = wv(start, null);
+  const mFrom = dashMonth+'-01', mTo = monthEnd(dashMonth);
+  const mnd = wv(mFrom, mTo);
+  const sM = saldi(mTo);
+  const ob = R2((s[1641]||0)+(s[1642]||0));
+  const teCoderen = (D.transacties||[]).filter(r=>r[3]===''||Number(r[3])===9999).length;
+  const factOpen = (D.facturen||[]).filter(f=>String(f[7])!=='Betaald');
+  const factBedrag = R2(factOpen.reduce((a,f)=>a+(Number(f[3])||0)-(Number(f[6])||0),0));
+  const bv = balansverschil();
+  const clr = ok => ok?'pos':'warn';
+
+  // omzetgroepen laatste 6 maanden
+  const GROUPS=[['Winkel',[8017],'--c1'],['Zorg',[8009,8010],'--c2'],['Pretecho/cursus',[8013],'--c3'],['Café',[8005],'--c4'],['Sport',[8020],'--c5'],['Overig',null,'--c6']];
+  const months=[]; { let m=dashMonth; for(let i=0;i<6;i++){ months.unshift(m); const [y,mm]=m.split('-').map(Number); m=mm===1?`${y-1}-12`:`${y}-${String(mm-1).padStart(2,'0')}`; } }
+  const series = months.map(m=>{
+    const w=wv(m+'-01', monthEnd(m)); const known=new Set(GROUPS.flatMap(g=>g[1]||[]));
+    const vals=GROUPS.map(g=> g[1] ? R2(g[1].reduce((a,c)=>a+(w.om[c]||0),0))
+      : R2(Object.entries(w.om).filter(([c])=>!known.has(Number(c))).reduce((a,[,v])=>a+v,0)));
+    return {m, vals, tot:R2(vals.reduce((a,b)=>a+Math.max(b,0),0))};
+  });
+  const maxTot=Math.max(...series.map(x=>x.tot),1);
+  const chart = `<div class="bar-row">`+series.map(x=>`<div class="bar-col" title="${monthName(x.m)}: ${fmt0(x.tot)}">`+
+      x.vals.map((v,i)=> v>0?`<div style="height:${Math.max(v/maxTot*118,2)}px;background:var(${GROUPS[i][2]});border-radius:2px"></div>`:'').join('')+
+    `</div>`).join('')+`</div>
+    <div class="bar-lab">${series.map(x=>`<span>${monthName(x.m).slice(0,3)}<br>${fmt0(x.tot)}</span>`).join('')}</div>
+    <div class="legend">${GROUPS.map(g=>`<span><i style="background:var(${g[2]})"></i>${g[0]}</span>`).join('')}</div>`;
+
+  const wvRows=(obj,neg)=>Object.entries(obj).filter(([,v])=>Math.abs(v)>=0.005).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]))
+    .map(([c,v])=>`<tr><td>${c} ${esc(nameOf(c))}</td><td class="num ${neg?'':''}">${fmt(v)}</td></tr>`).join('');
+
+  // balans
+  const gr={'Activa':[], 'RC-DGA':[], 'Passiva':[], 'Eigen vermogen':[]};
+  Object.entries(s).forEach(([c,v])=>{ const t=typeOf(c); if(gr[t] && Math.abs(v)>=0.005) gr[t].push([c,v]); });
+  const balTot={}; Object.keys(gr).forEach(t=>balTot[t]=R2(gr[t].reduce((a,[,v])=>a+v,0)));
+  const resTot=R2(wv(start,null).resultaat);
+  const balSection=t=>`<details><summary>${t} <span class="amount">${fmt(balTot[t])}</span></summary><table>`+
+    gr[t].sort((a,b)=>a[0]-b[0]).map(([c,v])=>`<tr><td>${c} ${esc(nameOf(c))}</td><td class="num">${fmt(v)}</td></tr>`).join('')+`</table></details>`;
+
+  $('#view').innerHTML = `
+  <div class="kpis">
+    <div class="kpi"><div class="l">Resultaat sinds ${start.slice(5)===`07-01`?'1 juli':start}</div><div class="v ${ytd.resultaat>=0?'pos':'neg'}">${fmt(ytd.resultaat)}</div><div class="s">omzet ${fmt0(ytd.omzet)}</div></div>
+    <div class="kpi"><div class="l">Omzet ${monthName(dashMonth)}</div><div class="v">${fmt0(mnd.omzet)}</div><div class="s">resultaat ${fmt0(mnd.resultaat)}</div></div>
+    <div class="kpi"><div class="l">Bank (1003)</div><div class="v">${fmt(s[1003]||0)}</div><div class="s">kas ${fmt(s[1001]||0)}</div></div>
+    <div class="kpi"><div class="l">OB te betalen</div><div class="v">${fmt(ob)}</div><div class="s">6%: ${fmt0(s[1641]||0)} · 9%: ${fmt0(s[1642]||0)}</div></div>
+    <div class="kpi"><div class="l">Voorraad (1406)</div><div class="v">${fmt0(s[1406]||0)}</div><div class="s">RC-DGA ${fmt0(s[1301]||0)}</div></div>
+    <div class="kpi"><div class="l">Controles</div>
+      <div class="s">Balansverschil <b class="${clr(Math.abs(bv)<0.01)}">${fmt(bv)}</b></div>
+      <div class="s">1419 <b class="${clr(Math.abs(sM[1419]||0)<1)}">${fmt(sM[1419]||0)}</b> · 1417 <b class="${clr(Math.abs(sM[1417]||0)<200)}">${fmt(sM[1417]||0)}</b> <span class="small">(per ${monthEnd(dashMonth).slice(8)}-${dashMonth.slice(5,7)})</span></div>
+      <div class="s">${teCoderen?`<span class="badge warn">${teCoderen} te coderen</span>`:'<span class="badge">alles gecodeerd ✓</span>'}
+      ${factOpen.length?` <span class="badge">${factOpen.length} open facturen · ${fmt0(factBedrag)}</span>`:''}</div>
+      ${factOpen.length?`<div class="s small">facturen tellen pas mee bij betaling (kasstelsel)</div>`:''}</div>
+  </div>
+  <div class="card"><h2>Omzet per maand</h2>${chart}</div>
+  <div class="card"><h2>W&V · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="dashMonth=this.value;render()">${monthOptions(dashMonth)}</select></h2>
+    <table><tr><th>Omzet</th><th class="num">${fmt(mnd.omzet)}</th></tr>${wvRows(mnd.om)}
+    <tr><th>Kosten</th><th class="num">${fmt(mnd.kosten)}</th></tr>${wvRows(mnd.ko,1)}
+    <tr><th>Resultaat</th><th class="num ${mnd.resultaat>=0?'pos':'neg'}">${fmt(mnd.resultaat)}</th></tr></table></div>
+  <div class="card"><h2>Balans (nu)</h2>
+    ${balSection('Activa')}${balSection('RC-DGA')}${balSection('Passiva')}${balSection('Eigen vermogen')}
+    <p class="small mt">EV + resultaat boekjaar = ${fmt(R2(balTot['Eigen vermogen']+resTot))}. Beginbalans bevat een ⚠️-sluitpost — vervang de ⚠️-standen in de sheet door de echte 30-06-cijfers en draai "Herbereken sluitpost".</p></div>`;
+}
+
+/* ── VIEW: INVOER ───────────────────────────────────────────── */
+let invMode = localStorage.getItem('bkInvMode')||'uitgave';
+function vInvoer(){
+  const modes=[['uitgave','Uitgave'],['verkoop','Verkoop'],['sluiting','Dagsluiting'],['memo','Memoriaal']];
+  $('#view').innerHTML = `
+  <div class="seg">${modes.map(([id,l])=>`<button class="${invMode===id?'on':''}" onclick="invMode='${id}';localStorage.setItem('bkInvMode','${id}');render()">${l}</button>`).join('')}</div>
+  <div class="card" id="invForm"></div>`;
+  ({uitgave:fUitgave, verkoop:fVerkoop, sluiting:fSluiting, memo:fMemo}[invMode])();
+}
+function fUitgave(){
+  $('#invForm').innerHTML = `
+  <h2>Uitgave (kas / privé / anders)</h2>
+  <p class="small">Bank- en creditcard-uitgaven komen binnen via 📥 Import — die hoef je hier niet in te voeren.</p>
+  <label>Datum</label><input type="date" id="uDatum" value="${today()}">
+  <label>Omschrijving</label><input id="uOms" placeholder="bijv. Kooyman schroeven" oninput="uSuggest()">
+  <label>Bedrag (ƒ)</label><input type="number" step="0.01" id="uBedrag" inputmode="decimal">
+  <label>Categorie (rekening)</label>${pickerBtn('uCode', c=>sgn(c)===1)}
+  <label>Betaald via</label>
+  <select id="uBron"><option value="1001">1001 · Kas</option><option value="1301">1301 · Privé (RC-DGA)</option><option value="1302">1302 · Nexus Holding</option></select>
+  <div id="uMsg"></div>
+  <button class="primary mt" style="width:100%" onclick="submitUitgave()">Boeken</button>`;
+}
+function uSuggest(){ const c=matchRule($('#uOms').value); if(c && !picked.uCode){ setPicked('uCode', c); toast(`Regel: → ${c} ${nameOf(c)}`);} }
+async function submitUitgave(){
+  try{
+    const d=$('#uDatum').value, o=$('#uOms').value.trim(), b=R2(Number($('#uBedrag').value)), code=picked.uCode, bron=Number($('#uBron').value);
+    if(!d||!o||!b||!code) throw new Error('Vul datum, omschrijving, bedrag en categorie in.');
+    // present: categorie +b (méér kosten/actief), bron −b. Beide teken +1 (picker filtert) → Σ deb = b − b = 0.
+    const rows=[{datum:d, omschrijving:o, bedrag:b, code, opmerking:'app-invoer'},
+                {datum:d, omschrijving:o, bedrag:-b, code:bron, opmerking:'app-invoer'}];
+    await api('addMemoriaal',{rows});
+    toast('Geboekt ✓'); $('#uOms').value=''; $('#uBedrag').value=''; clearPicked('uCode');
+    refresh();
+  }catch(e){ $('#uMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+function fVerkoop(){
+  $('#invForm').innerHTML = `
+  <h2>Losse verkoop (buiten POS)</h2>
+  <p class="small">Loopt netjes via clearing 1419, zoals MAN-boekingen in het oude systeem. POS- en sportles-verkopen komen automatisch binnen.</p>
+  <label>Datum</label><input type="date" id="vDatum" value="${today()}">
+  <label>Omschrijving</label><input id="vOms" placeholder="bijv. factuur verloszorg mevr. X">
+  <label>Bedrag incl. OB (ƒ)</label><input type="number" step="0.01" id="vBedrag" inputmode="decimal">
+  <label>Omzetrekening</label>${pickerBtn('vCode', c=>['Omzet','Passiva'].includes(typeOf(c)))}
+  <label>OB-tarief</label>
+  <select id="vPct"><option value="0">0% (zorg/verlos)</option><option value="6">6% (winkel/pretecho/sport)</option><option value="9">9% (café)</option></select>
+  <div id="vMsg"></div>
+  <button class="primary mt" style="width:100%" onclick="submitVerkoop()">Boeken</button>`;
+}
+async function submitVerkoop(){
+  try{
+    const d=$('#vDatum').value, o=$('#vOms').value.trim(), b=R2(Number($('#vBedrag').value)), code=picked.vCode, pct=Number($('#vPct').value);
+    if(!d||!o||!b||!code) throw new Error('Vul alles in.');
+    await api('addSales',{sales:[{importId:`MAN~${d}~${Date.now()}`, datum:d, omschrijving:o, incl:b, code, obPct: code===1720?0:pct}]});
+    toast('Verkoop geboekt ✓'); $('#vOms').value=''; $('#vBedrag').value=''; clearPicked('vCode');
+    refresh();
+  }catch(e){ $('#vMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+function fSluiting(){
+  $('#invForm').innerHTML = `
+  <h2>Dagsluiting (handmatig)</h2>
+  <p class="small">Zodra de Mirasoon POS live is pusht die dit zelf. Idempotent per dag — dubbel invoeren kan niet.</p>
+  <label>Datum</label><input type="date" id="sDatum" value="${today()}">
+  <div class="row"><div><label>Kaart (ƒ)</label><input type="number" step="0.01" id="sKaart" inputmode="decimal" value="0"></div>
+  <div><label>Contant (ƒ)</label><input type="number" step="0.01" id="sContant" inputmode="decimal" value="0"></div></div>
+  <div class="row"><div><label>Online (ƒ)</label><input type="number" step="0.01" id="sOnline" inputmode="decimal" value="0"></div>
+  <div><label>Cadeaukaart-inname (ƒ)</label><input type="number" step="0.01" id="sGift" inputmode="decimal" value="0"></div></div>
+  <div id="sMsg"></div>
+  <button class="primary mt" style="width:100%" onclick="submitSluiting()">Sluiting boeken</button>`;
+}
+async function submitSluiting(){
+  try{
+    const p={datum:$('#sDatum').value, kaart:Number($('#sKaart').value)||0, contant:Number($('#sContant').value)||0,
+      online:Number($('#sOnline').value)||0, cadeaukaartInname:Number($('#sGift').value)||0};
+    if(!p.datum) throw new Error('Datum verplicht');
+    const out=await api('posClosure', p);
+    toast(out.overgeslagen?'Sluiting bestond al':'Sluiting geboekt ✓'); refresh();
+  }catch(e){ $('#sMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+let memoRows=[];
+function fMemo(){
+  if(!memoRows.length) memoRows=[{},{}];
+  const som = R2(memoRows.reduce((a,r)=> a + (Number(r.bedrag)||0)*sgn(r.code||9999), 0));
+  $('#invForm').innerHTML = `
+  <h2>Vrij memoriaal</h2>
+  <p class="small">Present-termen: positief = méér van dat ding (schuld ↑ = +, omzet ↑ = +). Σ deb moet 0 zijn.</p>
+  <label>Datum</label><input type="date" id="mDatum" value="${memoRows.datum||today()}">
+  <label>Omschrijving / tag</label><input id="mOms" placeholder="bijv. [NL-inkomsten 2026-07]" value="${esc(memoRows.oms||'')}">
+  ${memoRows.map((r,i)=>`<div class="row mt">
+    <div style="flex:2">${pickerBtn('m'+i, null, r.code)}</div>
+    <div><input type="number" step="0.01" placeholder="± bedrag" value="${r.bedrag??''}" onchange="memoRows[${i}].bedrag=this.value;keepMemo();render()"></div>
+  </div>`).join('')}
+  <div class="row mt"><button onclick="memoRows.push({});keepMemo();render()">+ regel</button>
+  <button onclick="memoRows.pop();keepMemo();render()">− regel</button></div>
+  <div class="msg ${Math.abs(som)<0.005?'ok':'warn'} mt">Σ deb = ${fmt(som)} ${Math.abs(som)<0.005?'✓ in balans':'→ moet 0,00 zijn'}</div>
+  <div id="mMsg"></div>
+  <button class="primary" style="width:100%" onclick="submitMemo()" ${Math.abs(som)<0.005?'':'disabled'}>Boeken</button>`;
+}
+function keepMemo(){ memoRows.datum=$('#mDatum')?.value; memoRows.oms=$('#mOms')?.value; memoRows.forEach((r,i)=>{ if(picked['m'+i]) r.code=picked['m'+i]; }); }
+async function submitMemo(){
+  try{
+    keepMemo();
+    const d=memoRows.datum||today(), o=(memoRows.oms||'').trim();
+    if(!o) throw new Error('Omschrijving verplicht');
+    const rows=memoRows.filter(r=>r.code&&Number(r.bedrag)).map(r=>({datum:d, omschrijving:o, bedrag:R2(Number(r.bedrag)), code:r.code, opmerking:'app-memoriaal'}));
+    if(rows.length<2) throw new Error('Minimaal 2 regels');
+    await api('addMemoriaal',{rows, tag: o.startsWith('[')? o.split(']')[0]+']' : null});
+    toast('Memoriaal geboekt ✓'); memoRows=[]; Object.keys(picked).filter(k=>k.startsWith('m')).forEach(k=>delete picked[k]);
+    refresh();
+  }catch(e){ $('#mMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+/* ── rekening-picker ────────────────────────────────────────── */
+let picked = {}; let pickerFilter = null, pickerTarget = null;
+function pickerBtn(key, filter, preset){
+  if(preset) picked[key]=preset;
+  window['_pf_'+key]=filter||null;
+  const c=picked[key];
+  return `<button id="pb_${key}" style="width:100%;text-align:left;background:var(--bg);border:1px solid var(--line)" onclick="openPicker('${key}')">${c?`<b>${c}</b> ${esc(nameOf(c))}`:'— kies rekening —'}</button>`;
+}
+function setPicked(key,c){ picked[key]=c; const b=$('#pb_'+key); if(b) b.innerHTML=`<b>${c}</b> ${esc(nameOf(c))}`; }
+function clearPicked(key){ delete picked[key]; const b=$('#pb_'+key); if(b) b.textContent='— kies rekening —'; }
+function openPicker(key){
+  pickerTarget=key; pickerFilter=window['_pf_'+key];
+  const pop=document.createElement('div'); pop.className='picker-pop'; pop.id='pickerPop';
+  pop.innerHTML=`<div class="inner"><input id="pickSearch" placeholder="Zoek rekening (naam of code)…" oninput="renderPickResults()">
+  <div class="results" id="pickResults"></div><button class="mt" onclick="closePicker()">Annuleren</button></div>`;
+  pop.onclick=e=>{ if(e.target===pop) closePicker(); };
+  document.body.appendChild(pop); renderPickResults(); setTimeout(()=>$('#pickSearch').focus(),50);
+}
+function closePicker(){ $('#pickerPop')?.remove(); }
+function renderPickResults(){
+  const q=($('#pickSearch').value||'').toLowerCase();
+  let items=(D.schema||[]).map(r=>({code:Number(r[0]), naam:String(r[1]), type:String(r[2]).trim()}));
+  if(pickerFilter) items=items.filter(i=>pickerFilter(i.code));
+  if(q) items=items.filter(i=>String(i.code).includes(q)||i.naam.toLowerCase().includes(q));
+  else items.sort((a,b)=>(recent.indexOf(b.code)>=0?recent.indexOf(b.code)+1000:0)-(recent.indexOf(a.code)>=0?recent.indexOf(a.code)+1000:0)||a.code-b.code);
+  $('#pickResults').innerHTML=items.slice(0,60).map(i=>
+    `<div class="list-item" style="cursor:pointer" onclick="choosePick(${i.code})"><div class="grow"><div class="t">${i.code} · ${esc(i.naam)}</div><div class="d">${i.type}${recent.includes(i.code)?' · onlangs':''}</div></div></div>`).join('')||'<p class="small">Geen resultaten</p>';
+}
+function choosePick(c){
+  setPicked(pickerTarget, c);
+  recent=[c,...recent.filter(x=>x!==c)].slice(0,8); localStorage.setItem('bkRecent',JSON.stringify(recent));
+  closePicker();
+  if(pickerTarget?.startsWith('m')&&curView==='invoer'&&invMode==='memo'){ keepMemo(); memoRows[Number(pickerTarget.slice(1))].code=c; render(); }
+  if(pickerTarget==='tcCode') tcApply();
+}
+
+/* ── VIEW: IMPORT (CSV bank & creditcard) ───────────────────── */
+let impMode='bank';
+function vImport(){
+  $('#view').innerHTML=`
+  <div class="seg"><button class="${impMode==='bank'?'on':''}" onclick="impMode='bank';importCtx=null;render()">🏦 MCB Bank</button>
+  <button class="${impMode==='cc'?'on':''}" onclick="impMode='cc';importCtx=null;render()">💳 Creditcard</button></div>
+  <div class="card" id="impCard"></div>`;
+  if(!importCtx) impStep1(); else if(importCtx.stage==='map') impStepMap(); else impStepPreview();
+}
+function impStep1(){
+  $('#impCard').innerHTML=`<h2>${impMode==='bank'?'MCB bank-export (CSV)':'Creditcard-export (CSV) — USD × '+((D.instellingen||{}).USD_KOERS||1.82)}</h2>
+  <p class="small">${impMode==='bank'?'Exporteer per maand/kwartaal (MCB capt op 1000 regels). Dubbel uploaden is veilig: dedupe op ImportID.':'Credit-/betalingsregels worden automatisch overgeslagen (lopen al via de bank).'}</p>
+  <label>CSV-bestand</label><input type="file" accept=".csv,.txt" onchange="impFile(this.files[0])">`;
+}
+function parseCSV(text){
+  const delim=(text.split('\n')[0].match(/;/g)||[]).length>=(text.split('\n')[0].match(/,/g)||[]).length?';':',';
+  const rows=[]; let row=[], cell='', inQ=false;
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else inQ=false; } else cell+=ch; }
+    else if(ch==='"') inQ=true;
+    else if(ch===delim){ row.push(cell); cell=''; }
+    else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&text[i+1]==='\n') i++; row.push(cell); cell=''; if(row.some(c=>c.trim()!=='')) rows.push(row); row=[]; }
+    else cell+=ch; }
+  if(cell!==''||row.length){ row.push(cell); if(row.some(c=>c.trim()!=='')) rows.push(row); }
+  return rows;
+}
+function impFile(file){
+  if(!file) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ const rows=parseCSV(String(rd.result)); if(rows.length<2){ toast('CSV lijkt leeg'); return; }
+    const saved=cfg[impMode==='bank'?'mapBank':'mapCC'];
+    importCtx={stage:'map', rows, header:rows[0], map:saved||{}, fname:file.name}; render(); };
+  rd.readAsText(file);
+}
+function impStepMap(){
+  const h=importCtx.header;
+  const opt=(sel)=>'<option value="">—</option>'+h.map((c,i)=>`<option value="${i}" ${String(sel)===String(i)?'selected':''}>${esc(c||('kolom '+(i+1)))}</option>`).join('');
+  const m=importCtx.map;
+  $('#impCard').innerHTML=`<h2>Kolommen koppelen · ${esc(importCtx.fname)}</h2>
+  <p class="small">Eén keer instellen — de app onthoudt dit.</p>
+  <label>Datum</label><select id="cDatum">${opt(m.datum)}</select>
+  <label>Omschrijving</label><select id="cOms">${opt(m.oms)}</select>
+  <label>Omschrijving 2 (optioneel, wordt erachter geplakt)</label><select id="cOms2">${opt(m.oms2)}</select>
+  <label>Bedrag (één kolom, ± of met D/C)</label><select id="cBedrag">${opt(m.bedrag)}</select>
+  <div class="row"><div><label>óf Debet/Af</label><select id="cAf">${opt(m.af)}</select></div>
+  <div><label>en Credit/Bij</label><select id="cBij">${opt(m.bij)}</select></div></div>
+  <label>Datumformaat</label><select id="cDf">
+    <option value="auto" ${!m.df||m.df==='auto'?'selected':''}>automatisch</option>
+    <option value="dmy" ${m.df==='dmy'?'selected':''}>dd-mm-jjjj / dd/mm/jjjj</option>
+    <option value="mdy" ${m.df==='mdy'?'selected':''}>mm/dd/jjjj</option>
+    <option value="ymd" ${m.df==='ymd'?'selected':''}>jjjj-mm-dd</option></select>
+  <button class="primary mt" style="width:100%" onclick="impBuild()">Volgende: controle →</button>`;
+}
+function parseAmt(s){
+  if(s==null) return NaN; s=String(s).trim().replace(/[ƒ$\s]/g,'');
+  if(!s) return NaN;
+  const neg=/^\(.*\)$/.test(s)||/-$/.test(s); s=s.replace(/[()]/g,'').replace(/-$/,'');
+  if(/,\d{1,2}$/.test(s)) s=s.replace(/\./g,'').replace(',','.');
+  else s=s.replace(/,/g,'');
+  const n=Number(s); return isNaN(n)?NaN:(neg?-Math.abs(n):n);
+}
+function parseDate(s, df){
+  s=String(s).trim(); if(!s) return null;
+  let m;
+  if((m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/))) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  if((m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/))){
+    let a=Number(m[1]), b=Number(m[2]), y=m[3].length===2?'20'+m[3]:m[3];
+    let d,mn; if(df==='mdy'){d=b;mn=a;} else if(df==='dmy'){d=a;mn=b;} else { if(a>12){d=a;mn=b;} else if(b>12){d=b;mn=a;} else {d=a;mn=b;} }
+    return `${y}-${String(mn).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return null;
+}
+function impBuild(){
+  const m=importCtx.map={ datum:$('#cDatum').value, oms:$('#cOms').value, oms2:$('#cOms2').value,
+    bedrag:$('#cBedrag').value, af:$('#cAf').value, bij:$('#cBij').value, df:$('#cDf').value };
+  if(m.datum===''||m.oms===''||(m.bedrag===''&&(m.af===''||m.bij===''))){ toast('Koppel minimaal datum, omschrijving en bedrag'); return; }
+  cfg[impMode==='bank'?'mapBank':'mapCC']=m; saveCfg();
+  const koers=Number((D.instellingen||{}).USD_KOERS)||1.82;
+  const geld=impMode==='bank'?'1003':'1709';
+  const existing=new Set((D.transacties||[]).map(r=>String(r[7])));
+  const seen={}; const items=[];
+  importCtx.rows.slice(1).forEach(r=>{
+    const datum=parseDate(r[m.datum], m.df); if(!datum) return;
+    let oms=String(r[m.oms]||'').trim(); if(m.oms2!=='') oms=(oms+' '+String(r[m.oms2]||'').trim()).trim();
+    let bedrag;
+    if(m.bedrag!=='') bedrag=parseAmt(r[m.bedrag]);
+    else { const af=parseAmt(r[m.af]), bij=parseAmt(r[m.bij]); bedrag=(isNaN(bij)?0:Math.abs(bij))-(isNaN(af)?0:Math.abs(af)); }
+    if(isNaN(bedrag)||bedrag===0||!oms) return;
+    let skip=false, skipWhy='';
+    if(impMode==='cc'){ bedrag=R2(bedrag*koers);
+      if(bedrag>0||/PAYMENT|BETALING|THANK YOU|AUTOMATI/i.test(oms)){ skip=true; skipWhy='credit/betaling — loopt via bank'; } }
+    const key=`${geld}~${datum}~${bedrag.toFixed(2)}~${djb2(oms.toUpperCase())}`;
+    seen[key]=(seen[key]||0)+1;
+    const id=`${key}~${seen[key]}`;
+    const dup=existing.has(id);
+    const code=matchRule(oms);
+    items.push({datum, oms, bedrag, code, id, dup, skip, skipWhy});
+  });
+  importCtx.items=items; importCtx.stage='preview'; render();
+}
+function impStepPreview(){
+  const it=importCtx.items;
+  const nieuw=it.filter(x=>!x.dup&&!x.skip);
+  const rows=it.map((x,i)=>`<tr style="${x.dup||x.skip?'opacity:.45':''}">
+    <td><input type="checkbox" ${x.dup||x.skip?'':'checked'} ${x.dup?'disabled':''} onchange="importCtx.items[${i}].skip=!this.checked"></td>
+    <td>${x.datum.slice(5)}<br><span class="small">${esc(x.oms.slice(0,44))}</span>${x.dup?'<br><span class="badge">al geïmporteerd</span>':''}${x.skipWhy?`<br><span class="badge warn">${x.skipWhy}</span>`:''}</td>
+    <td class="num ${x.bedrag<0?'':'pos'}">${fmt(x.bedrag)}</td>
+    <td><button style="padding:4px 8px;font-size:13px" onclick="impPick(${i})">${x.code?`${x.code}`:'❓ 9999'}</button></td></tr>`).join('');
+  $('#impCard').innerHTML=`<h2>Controle · ${nieuw.length} nieuw, ${it.filter(x=>x.dup).length} dubbel, ${it.filter(x=>x.skip&&!x.dup).length} overgeslagen</h2>
+  <div style="overflow:auto;max-height:55vh"><table><tr><th></th><th>Omschrijving</th><th class="num">Bedrag</th><th>Code</th></tr>${rows}</table></div>
+  <div id="impMsg"></div>
+  <div class="row mt"><button onclick="importCtx=null;render()">Annuleren</button>
+  <button class="primary" onclick="impPost()">✓ ${nieuw.length} boeken</button></div>`;
+}
+function impPick(i){ pickerTarget='imp'+i; pickerFilter=null; openPicker('imp'+i);
+  const orig=choosePick; // hook via picked
+  const iv=setInterval(()=>{ if(picked['imp'+i]){ importCtx.items[i].code=picked['imp'+i]; delete picked['imp'+i]; clearInterval(iv); render(); } if(!$('#pickerPop')) clearInterval(iv); },200);
+}
+async function impPost(){
+  try{
+    const rows=importCtx.items.filter(x=>!x.dup&&!x.skip).map(x=>({
+      datum:x.datum, omschrijving:x.oms, bedrag:x.bedrag, code:x.code||9999, obPct:'', obBedrag:'',
+      status:x.code?(impMode==='bank'?'Bank':'CC'):'Te coderen', importId:x.id, link:''}));
+    if(!rows.length) throw new Error('Niets te boeken');
+    const out=await api('addTransactions',{rows});
+    toast(`✓ ${out.toegevoegd} geboekt, ${out.overgeslagen} overgeslagen`); importCtx=null;
+    await refresh();
+  }catch(e){ $('#impMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+/* ── VIEW: BONNEN ───────────────────────────────────────────── */
+function vBonnen(){
+  const bonnen=(D.bonnen||[]).slice().reverse();
+  const open=b=>['Nieuw',''].includes(String(b[5]));
+  $('#view').innerHTML=`<div class="card"><h2>Bonnen (Bonbot) · ${openBonnen().length} open</h2>
+  ${bonnen.length?'':'<p class="small">Nog geen bonnen. Bonbot pusht ze automatisch via de API (zie API.md).</p>'}
+  ${bonnen.map(b=>{
+    const [datum,oms,bedrag,foto,sug,status,id,kop]=b;
+    return `<div class="list-item"><div class="grow">
+      <div class="t">${esc(oms)}</div>
+      <div class="d">${String(datum).slice(0,10)} · ${status||'Nieuw'}${kop?' · '+esc(String(kop).slice(0,30)):''}
+      ${foto?` · <a href="${esc(foto)}" target="_blank">📷 foto</a>`:''}</div>
+      ${open(b)?`<div class="mt"><button style="font-size:13px" onclick="bonBook('${esc(id)}', ${sug||'null'})">Boek als uitgave</button>
+      <button style="font-size:13px" onclick="bonLink('${esc(id)}')">Koppel aan bank/CC</button>
+      <button style="font-size:13px" onclick="bonDismiss('${esc(id)}')">✕</button></div>`:''}
+    </div><div class="amount">${fmt(Number(bedrag)||0)}</div></div>`;}).join('')}</div>`;
+}
+async function bonBook(id, sug){
+  const b=(D.bonnen||[]).find(x=>String(x[6])===id); if(!b) return;
+  bonCtx={id, b, sug}; pickerTarget='bonCode'; pickerFilter=null; openPicker('bonCode');
+  const iv=setInterval(async ()=>{
+    if(picked.bonCode){ const code=picked.bonCode; delete picked.bonCode; clearInterval(iv);
+      const bron=prompt('Betaald via? 1001=kas, 1301=privé (of andere code)', '1301'); if(!bron) return;
+      try{
+        await api('addMemoriaal',{rows:[
+          {datum:String(b[0]).slice(0,10), omschrijving:'Bon: '+b[1], bedrag:R2(Number(b[2])), code, opmerking:'bon '+id},
+          {datum:String(b[0]).slice(0,10), omschrijving:'Bon: '+b[1], bedrag:-R2(Number(b[2])), code:Number(bron), opmerking:'bon '+id}]});
+        await api('updateReceipt',{bonId:id, status:'Geboekt', code, gekoppeldAan:'memoriaal'});
+        toast('Bon geboekt ✓'); refresh();
+      }catch(e){ toast('Fout: '+e.message,4000); } }
+    if(!$('#pickerPop')&&!picked.bonCode) clearInterval(iv);
+  },200);
+}
+let bonCtx=null;
+async function bonLink(id){
+  const b=(D.bonnen||[]).find(x=>String(x[6])===id); if(!b) return;
+  const amt=R2(Number(b[2]));
+  const cand=(D.transacties||[]).filter(r=>Math.abs(Math.abs(Number(r[2]))-amt)<0.011).slice(-8);
+  const pick=cand.length===1?0:Number(prompt('Koppel aan (nummer):\n'+cand.map((r,i)=>`${i}: ${String(r[0]).slice(0,10)} ${r[1]} ${fmt(Number(r[2]))}`).join('\n')||'geen kandidaten', '0'));
+  if(isNaN(pick)||!cand[pick]) { toast('Geen match gekozen'); return; }
+  try{ await api('updateReceipt',{bonId:id, status:'Gekoppeld', gekoppeldAan:String(cand[pick][7])}); toast('Gekoppeld ✓'); refresh(); }
+  catch(e){ toast('Fout: '+e.message,4000); }
+}
+async function bonDismiss(id){ try{ await api('updateReceipt',{bonId:id, status:'Afgewezen'}); refresh(); }catch(e){ toast(e.message); } }
+
+/* ── VIEW: MEER (afsluiting, te coderen, regels, instellingen) ─ */
+let meerTab = cfg.apiUrl?'afsluiting':'instellingen';
+function vMeer(){
+  const tabs=[['afsluiting','🗓 Maandafsluiting'],['coderen','❓ Te coderen'],['regels','🤖 Regels'],['instellingen','⚙️ Instellingen']];
+  $('#view').innerHTML=`<div class="seg">${tabs.map(([id,l])=>`<button class="${meerTab===id?'on':''}" onclick="meerTab='${id}';render()">${l}</button>`).join('')}</div><div id="meerBody"></div>`;
+  ({afsluiting:vAfsluiting, coderen:vCoderen, regels:vRegels, instellingen:vInstellingen}[meerTab])();
+}
+
+/* — maandafsluiting wizard — */
+function vAfsluiting(){
+  if(!D){ $('#meerBody').innerHTML='<div class="card">Eerst verbinden.</div>'; return; }
+  const m=wizMonth, eind=monthEnd(m), s=saldi(eind);
+  const cogsPct=Number((D.instellingen||{}).COGS_PCT)||0.6;
+  // sluitingen-dekking
+  const sluitDagen=new Set(); (D.memoriaal||[]).forEach(r=>{ const mm=String(r[1]).match(/\[Sluiting (\d{4}-\d{2}-\d{2})\]/); if(mm&&mm[1].startsWith(m)) sluitDagen.add(mm[1]); });
+  const posDagen=new Set(); (D.transacties||[]).forEach(r=>{ const id=String(r[7]); const d=String(r[0]).slice(0,10); if(d.startsWith(m)&&/^(POS|WEB)~/.test(id)) posDagen.add(d); });
+  const missend=[...posDagen].filter(d=>!sluitDagen.has(d)).sort();
+  // stappen
+  const done=t=>memoTagExists(t);
+  const tagOR=`[Op rekening ${m}]`, tagPV=`[Pin-vereffening ${m}]`, tagPR=`[Pretecho-reclass ${m}]`, tagCO=`[COGS ${m}]`;
+  const s1419=R2(s[1419]||0), s1417=R2(s[1417]||0), s1408=R2(s[1408]||0);
+  const w=wv(m+'-01', eind);
+  const omzet8017=R2(w.om[8017]||0);
+  const cogsSug=R2(cogsPct*omzet8017);
+  const step=(nr,titel,tag,body,kanBoeken)=>`<div class="step"><h3>${done(tag)?'✅':nr+'.'} ${titel} ${done(tag)?'<span class="badge done">geboekt</span>':''}</h3>${done(tag)?`<p class="small">${tag} staat al in het memoriaal.</p>`:body}</div>`;
+  $('#meerBody').innerHTML=`
+  <div class="card"><h2>Maandafsluiting · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select></h2>
+  <div class="step"><h3>${missend.length?'⚠️':'✅'} 0. Dagsluitingen compleet?</h3>
+    <p class="small">${missend.length?`Verkoopdagen zonder sluiting: <b>${missend.map(d=>d.slice(8)).join(', ')}</b> — voer ze in via ➕ Invoer → Dagsluiting.`:`Alle ${sluitDagen.size} sluitingsdagen aanwezig.`}</p></div>
+  ${step(1,'Op rekening → 1408', tagOR, `
+    <p class="small">POS-omzet die niet via de betalingen is geïnd gaat van 1419 naar debiteuren. 1419 staat nu op <b>${fmt(s1419)}</b> per ${eind}. <i>Vervalt zodra de POS facturen via invoiceOpen/invoicePaid pusht — dan blijft 1419 vanzelf op 0.</i></p>
+    <label>Bedrag</label><input type="number" step="0.01" id="orBedrag" value="${Math.max(s1419,0).toFixed(2)}">
+    <button class="primary mt" onclick="wizBoek('${tagOR}','${eind}',[{c:1419,b:-num('orBedrag')},{c:1408,b:num('orBedrag')}])">Boek ${tagOR}</button>`)}
+  ${step(2,'Pin-vereffening', tagPV, `
+    <p class="small">Pinontvangsten boven closure-kaart: eerst 1408 vereffenen, restant = verloszorg-omzet 8010 (0%). 1417 staat op <b>${fmt(s1417)}</b>, 1408 op <b>${fmt(s1408)}</b>. <i>Vervalt zodra de POS invoicePaid (bron pin) pusht.</i></p>
+    <label>Pin boven closure (ƒ)</label><input type="number" step="0.01" id="pvBedrag" value="${Math.max(-s1417,0).toFixed(2)}">
+    <label>Waarvan vereffening 1408 (rest wordt 8010)</label><input type="number" step="0.01" id="pvDeb" value="${Math.min(Math.max(-s1417,0),Math.max(s1408,0)).toFixed(2)}">
+    <button class="primary mt" onclick="wizPin('${tagPV}','${eind}')">Boek ${tagPV}</button>`)}
+  ${step(3,'Pretecho-reclass 8017 → 8013', tagPR, `
+    <p class="small">Som excl. van 3D echo + 2D pretecho + Geslachtsbepaling deze maand (uit je POS-rapport).</p>
+    <label>Bedrag excl. (ƒ)</label><input type="number" step="0.01" id="prBedrag" value="0">
+    <button class="primary mt" onclick="wizBoek('${tagPR}','${eind}',[{c:8017,b:-num('prBedrag')},{c:8013,b:num('prBedrag')}])">Boek ${tagPR}</button>`)}
+  ${step(4,'COGS '+(cogsPct*100)+'% × winkelomzet', tagCO, `
+    <p class="small">Winkelomzet 8017 excl. deze maand (na reclass): <b>${fmt(omzet8017)}</b> → COGS-voorstel <b>${fmt(cogsSug)}</b>. ${done(tagPR)?'':'⚠️ Boek eerst de pretecho-reclass.'}</p>
+    <label>Bedrag</label><input type="number" step="0.01" id="coBedrag" value="${cogsSug.toFixed(2)}">
+    <button class="primary mt" onclick="wizBoek('${tagCO}','${eind}',[{c:7002,b:num('coBedrag')},{c:1406,b:-num('coBedrag')}])">Boek ${tagCO}</button>`)}
+  <div class="step"><h3>5. Eindcontroles</h3>
+    <p class="small">Balansverschil: <b class="${Math.abs(balansverschil())<0.01?'pos':'neg'}">${fmt(balansverschil())}</b> (moet 0,00) ·
+    1419: <b class="${Math.abs(s1419)<1?'pos':'warn'}">${fmt(s1419)}</b> ·
+    1417: <b class="${Math.abs(s1417)<200?'pos':'warn'}">${fmt(s1417)}</b> (settle-lag van dagen is normaal) ·
+    OB-stand 1641+1642: <b>${fmt(R2((s[1641]||0)+(s[1642]||0)))}</b></p></div>
+  <div id="wizMsg"></div></div>`;
+}
+window.num = id => R2(Number(document.getElementById(id).value)||0);
+async function wizBoek(tag, datum, legs){
+  try{
+    const rows=legs.filter(l=>Math.abs(l.b)>=0.005).map(l=>({datum, omschrijving:tag, bedrag:l.b, code:l.c, opmerking:'maandafsluiting'}));
+    if(!rows.length) throw new Error('Bedrag is 0');
+    const som=R2(rows.reduce((a,r)=>a+r.bedrag*sgn(r.code),0));
+    if(Math.abs(som)>=0.01) throw new Error('Boeking niet in balans: Σ deb = '+fmt(som));
+    await api('addMemoriaal',{rows, tag});
+    toast(tag+' geboekt ✓'); await refresh();
+  }catch(e){ $('#wizMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+async function wizPin(tag, datum){
+  const X=num('pvBedrag'), X1=Math.min(num('pvDeb'),X), X2=R2(X-X1);
+  const legs=[{c:1417,b:X}]; if(X1) legs.push({c:1408,b:-X1}); if(X2) legs.push({c:8010,b:X2});
+  await wizBoek(tag, datum, legs);
+}
+
+/* — te coderen — */
+let tcTarget=null;
+function vCoderen(){
+  const items=(D.transacties||[]).map((r,i)=>({r,i})).filter(({r})=>r[3]===''||Number(r[3])===9999).reverse();
+  $('#meerBody').innerHTML=`<div class="card"><h2>Te coderen (9999) · ${items.length}</h2>
+  ${items.length?'':'<p class="small">Niets te coderen 🎉</p>'}
+  ${items.map(({r})=>`<div class="list-item"><div class="grow">
+    <div class="t">${esc(r[1])}</div><div class="d">${String(r[0]).slice(0,10)} · ${esc(String(r[7]).slice(0,26))}…</div>
+    <button class="mt" style="font-size:13px" onclick="tcOpen('${esc(String(r[7]))}')">Codeer</button></div>
+    <div class="amount">${fmt(Number(r[2])||0)}</div></div>`).join('')}</div>`;
+}
+function tcOpen(importId){ tcTarget=importId; delete picked.tcCode; openPicker('tcCode'); }
+async function tcApply(){
+  const code=picked.tcCode; delete picked.tcCode;
+  if(!code||!tcTarget) return;
+  try{
+    await api('setCode',{importId:tcTarget, code, status:'Gecodeerd'});
+    const r=(D.transacties||[]).find(x=>String(x[7])===tcTarget);
+    if(r && confirm(`Regel maken?\n"${r[1]}" → altijd ${code} ${nameOf(code)}`)){
+      const pat=prompt('Patroon (deel van omschrijving):', String(r[1]).slice(0,28).trim());
+      if(pat) await api('addRule',{patroon:pat, code});
+    }
+    toast('Gecodeerd ✓'); tcTarget=null; refresh();
+  }catch(e){ toast('Fout: '+e.message,4000); }
+}
+
+/* — regels — */
+function vRegels(){
+  $('#meerBody').innerHTML=`<div class="card"><h2>Coderingsregels · ${(D.regels||[]).length}</h2>
+  <p class="small">Substring, hoofdletterongevoelig, eerste match wint. Verwijderen/wijzigen doe je in de sheet (🤖 Regels).</p>
+  <div class="row"><input id="rgPat" placeholder="patroon, bv. KOOYMAN"><div style="flex:0 0 120px">${pickerBtn('rgCode')}</div></div>
+  <button class="primary mt" onclick="rgAdd()">+ Regel toevoegen</button>
+  <input class="mt" id="rgZoek" placeholder="Zoek in regels…" oninput="rgFilter()">
+  <div id="rgList" style="max-height:50vh;overflow:auto"></div></div>`;
+  rgFilter();
+}
+function rgFilter(){
+  const q=($('#rgZoek')?.value||'').toLowerCase();
+  $('#rgList').innerHTML=(D.regels||[]).filter(r=>!q||String(r[0]).toLowerCase().includes(q)||String(r[1]).includes(q))
+    .map(r=>`<div class="list-item"><div class="grow"><div class="t mono">${esc(r[0])}</div></div><span class="badge">${r[1]} ${esc(nameOf(r[1]).slice(0,18))}</span></div>`).join('');
+}
+async function rgAdd(){
+  try{ const pat=$('#rgPat').value.trim(), code=picked.rgCode;
+    if(!pat||!code) throw new Error('Patroon en code verplicht');
+    await api('addRule',{patroon:pat, code}); toast('Regel toegevoegd ✓'); $('#rgPat').value=''; clearPicked('rgCode'); refresh();
+  }catch(e){ toast(e.message,3600); }
+}
+
+/* — instellingen — */
+function vInstellingen(){
+  $('#meerBody').innerHTML=`<div class="card"><h2>Verbinding</h2>
+  <label>Apps Script web-app URL</label><input id="setUrl" value="${esc(cfg.apiUrl||'')}" placeholder="https://script.google.com/macros/s/…/exec">
+  <label>Token (TOKEN_OWNERS uit ⚙️ Instellingen in de sheet)</label><input id="setTok" value="${esc(cfg.token||'')}">
+  <div class="row mt"><button onclick="setSave()">Opslaan</button><button class="primary" onclick="setTest()">Test verbinding</button></div>
+  <div id="setMsg"></div></div>
+  <div class="card"><h2>App</h2>
+  <p class="small">📱 <b>Op je telefoon installeren:</b> open deze site in Safari (iPhone) of Chrome (Android) → Deel/menu → "Zet op beginscherm". De mede-eigenaar doet hetzelfde met dezelfde URL + token.</p>
+  <p class="small mt">USD-koers: ${(D&&D.instellingen&&D.instellingen.USD_KOERS)||'1.82'} · COGS: ${((D&&D.instellingen&&D.instellingen.COGS_PCT)||0.6)*100}% · boekjaarstart: ${(D&&D.instellingen&&D.instellingen.BOEKJAAR_START)||'2026-07-01'} (aanpassen in ⚙️ Instellingen in de sheet)</p>
+  <button class="mt" onclick="localStorage.removeItem('bkData');localStorage.removeItem('bkCfg');location.reload()">Reset app-gegevens</button></div>`;
+}
+function setSave(){ cfg.apiUrl=$('#setUrl').value.trim(); cfg.token=$('#setTok').value.trim(); saveCfg(); toast('Opgeslagen'); }
+async function setTest(){
+  setSave();
+  try{ const out=await api('ping',{}); $('#setMsg').innerHTML=`<div class="msg ok">Verbonden ✓ (scope: ${out.scope})</div>`; refresh(); }
+  catch(e){ $('#setMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+/* ── boot ───────────────────────────────────────────────────── */
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+const cached=localStorage.getItem('bkData');
+if(cached){ try{ D=JSON.parse(cached); D.schema.forEach(r=>schemaMap[Number(r[0])]={naam:r[1],type:String(r[2]).trim()}); $('#hdrSub').textContent='offline kopie'; }catch(e){} }
+render();
+if(cfg.apiUrl) refresh();
+</script>
+</body>
+</html>
