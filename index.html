@@ -727,11 +727,71 @@ async function impPost(){
 }
 
 /* ── VIEW: BONNEN ───────────────────────────────────────────── */
+/* — nieuwe bon uploaden: foto → analyseerBon (Claude leest 'm uit + slaat 'm
+   op in Drive) → kaart kiezen → boekBon (archief=addReceipt, anders addExpense).
+   Vervangt Bonbot/Telegram: draait volledig server-side in Apps Script. — */
+let bonUpload=null;   // { stage: 'idle'|'analyzing'|'confirm', data, kaart }
+function bonUploadReset(){ bonUpload=null; render(); }
+function bonUploadFile(file){
+  if(!file) return;
+  bonUpload={stage:'analyzing'};
+  render();
+  const rd=new FileReader();
+  rd.onload=async ()=>{
+    const base64=String(rd.result).split(',')[1];
+    try{
+      const out=await api('analyseerBon',{foto:base64, mimeType:file.type||'image/jpeg'});
+      bonUpload={stage:'confirm', data:out, kaart:''};
+    }catch(e){
+      toast('Kon de bon niet lezen: '+e.message, 4000);
+      bonUpload=null;
+    }
+    render();
+  };
+  rd.onerror=()=>{ toast('Kon de foto niet lezen'); bonUpload=null; render(); };
+  rd.readAsDataURL(file);
+}
+function bonUploadCard(){
+  const d=bonUpload.data;
+  const kaart=bonUpload.kaart;
+  const zekerWarn = d.zekerheid==='laag' ? '<p class="msg warn">⚠️ Lage zekerheid — check het bedrag/de gegevens even.</p>' : '';
+  return `<div class="card">
+    <h2>Nieuwe bon — controleren</h2>
+    <p class="small">${esc(d.leverancier||'onbekend')} — ${d.valuta} ${d.bedrag!=null?d.bedrag.toFixed(2):'?'} (${d.datum})</p>
+    <p class="small">Categorie: ${esc(d.categorie)} · ${esc(d.omschrijving||'')}</p>
+    ${zekerWarn}
+    <label class="field-label mt">Betaald met</label>
+    <div class="seg" style="flex-wrap:wrap">${d.cards.map(c=>`<button class="${kaart===c?'on':''}" onclick="bonUpload.kaart='${esc(c)}';render()">${esc(c)}</button>`).join('')}</div>
+    <div id="bonUploadMsg" class="mt"></div>
+    <div class="row mt">
+      <button onclick="bonUploadReset()">Annuleren</button>
+      <button class="primary" ${kaart?'':'disabled'} onclick="bonUploadConfirm()">✓ Boeken</button>
+    </div>
+  </div>`;
+}
+async function bonUploadConfirm(){
+  try{
+    const d=bonUpload.data;
+    await api('boekBon',{
+      bonId: 'PWA'+Date.now(), datum:d.datum, leverancier:d.leverancier, omschrijving:d.omschrijving,
+      bedrag:d.bedrag, valuta:d.valuta, categorie:d.categorie, kaart:bonUpload.kaart, fotoUrl:d.fotoUrl,
+    });
+    toast('Bon geboekt ✓'); bonUpload=null; refresh();
+  }catch(e){ $('#bonUploadMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+
 function vBonnen(){
   const bonnen=(D.bonnen||[]).slice().reverse();
   const open=b=>['Nieuw',''].includes(String(b[5]));
-  $('#view').innerHTML=`<div class="card"><h2>Bonnen (Bonbot) · ${openBonnen().length} open</h2>
-  ${bonnen.length?'':'<p class="small">Nog geen bonnen. Bonbot pusht ze automatisch via de API (zie API.md).</p>'}
+  if(bonUpload && bonUpload.stage==='analyzing'){
+    $('#view').innerHTML='<div class="card"><h2>Nieuwe bon</h2><p class="small">📸 Bon lezen…</p></div>'; return;
+  }
+  if(bonUpload && bonUpload.stage==='confirm'){ $('#view').innerHTML=bonUploadCard(); return; }
+  $('#view').innerHTML=`<div class="card">
+  <h2>Bonnen · ${openBonnen().length} open</h2>
+  <label>Foto van een bon(netje)</label>
+  <input type="file" accept="image/*" capture="environment" onchange="bonUploadFile(this.files[0])">
+  ${bonnen.length?'':'<p class="small mt">Nog geen bonnen.</p>'}
   ${bonnen.map(b=>{
     const [datum,oms,bedrag,foto,sug,status,id,kop]=b;
     return `<div class="list-item"><div class="grow">
