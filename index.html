@@ -322,11 +322,11 @@ function vDash(){
 /* ── VIEW: INVOER ───────────────────────────────────────────── */
 let invMode = localStorage.getItem('bkInvMode')||'uitgave';
 function vInvoer(){
-  const modes=[['uitgave','Uitgave'],['verkoop','Verkoop'],['sluiting','Dagsluiting'],['memo','Memoriaal'],['loon','Loonjournaal']];
+  const modes=[['uitgave','Uitgave'],['verkoop','Verkoop'],['sluiting','Dagsluiting'],['memo','Memoriaal'],['loon','Loonjournaal'],['obimport','OB-import']];
   $('#view').innerHTML = `
   <div class="seg">${modes.map(([id,l])=>`<button class="${invMode===id?'on':''}" onclick="invMode='${id}';localStorage.setItem('bkInvMode','${id}');render()">${l}</button>`).join('')}</div>
   <div class="card" id="invForm"></div>`;
-  ({uitgave:fUitgave, verkoop:fVerkoop, sluiting:fSluiting, memo:fMemo, loon:fLoon}[invMode])();
+  ({uitgave:fUitgave, verkoop:fVerkoop, sluiting:fSluiting, memo:fMemo, loon:fLoon, obimport:fObImport}[invMode])();
 }
 function fUitgave(){
   $('#invForm').innerHTML = `
@@ -519,6 +519,45 @@ async function loonSubmit(){
     await api('addMemoriaal',{rows, tag});
     toast(tag+' geboekt ✓'); loonCtx=null; refresh();
   }catch(e){ $('#loonMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
+}
+
+/* — OB on import (Caribbean Cargo-facturen, helft verrekenbaar tegen 6%) —
+   CCS-vrachtfacturen komen nu volledig op 1406 Voorraad binnen (bank-import
+   regel). De helft van de OB-on-import-component daarin mag je terugvragen
+   op de aangifte. Vul het TOTAALBEDRAG in (som van alle CCS-facturen die
+   maand) — de app trekt zelf de helft van 1406 af en van 1641 (6%), altijd
+   in balans, geen 1410-tussenstap nodig. */
+function fObImport(){
+  const m=wizMonth;
+  const tag=`[OB-import ${m}]`;
+  const done=memoTagExists(tag);
+  $('#invForm').innerHTML=`
+  <h2>OB on import — CCS-facturen</h2>
+  <p class="small">Tel de "OB on import"-regels van alle Caribbean Cargo-facturen deze maand op en vul
+  hier het TOTAALBEDRAG in — de helft daarvan is verrekenbaar. Boekt: −helft op 1406 Voorraad
+  (haalt het verrekenbare deel uit de voorraadkost), −helft op 1641 OB 6% te betalen. De andere helft
+  blijft gewoon in 1406 staan (is dan echte voorraadkost).</p>
+  <label>Maand</label><select id="obiMaand" style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select>
+  ${done?`<p class="msg ok mt">${tag} staat al in het memoriaal.</p>`:`
+  <label>Totaalbedrag OB on import deze maand (ƒ)</label><input type="number" step="0.01" id="obiTotaal" inputmode="decimal">
+  <p class="small" id="obiPreview"></p>
+  <div id="obiMsg"></div>
+  <button class="primary mt" style="width:100%" onclick="obImportSubmit('${tag}','${m}')">Boeken</button>`}`;
+  if(!done) $('#obiTotaal').oninput=()=>{ const t=Number($('#obiTotaal').value)||0; $('#obiPreview').textContent = t? `Verrekenbaar (helft): ${fmt(R2(t/2))}` : ''; };
+}
+async function obImportSubmit(tag, maand){
+  try{
+    const totaal=Number($('#obiTotaal').value)||0;
+    if(totaal<=0) throw new Error('Vul het totaalbedrag in');
+    const helft=R2(totaal/2);
+    const datum=maand+'-01';
+    const rows=[
+      {datum, omschrijving:`${tag} verrekening OB on import (helft van ${fmt(totaal)})`, bedrag:-helft, code:1406, opmerking:'ob-import'},
+      {datum, omschrijving:`${tag} verrekening OB on import (helft van ${fmt(totaal)})`, bedrag:-helft, code:1641, opmerking:'ob-import'},
+    ];
+    await api('addMemoriaal',{rows, tag});
+    toast(tag+' geboekt ✓'); refresh();
+  }catch(e){ $('#obiMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
 }
 
 /* ── rekening-picker ────────────────────────────────────────── */
