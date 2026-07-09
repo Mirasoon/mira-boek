@@ -294,6 +294,8 @@ function vDash(){
   const resTot=R2(wv(start,null).resultaat);
   const balSection=t=>`<details><summary>${t} <span class="amount">${fmt(balTot[t])}</span></summary><table>`+
     gr[t].sort((a,b)=>a[0]-b[0]).map(([c,v])=>`<tr><td>${c} ${esc(nameOf(c))}</td><td class="num">${fmt(v)}</td></tr>`).join('')+`</table></details>`;
+  const sluitpostRow=(D.beginbalans||[]).find(r=>String(r[1]).includes('SLUITPOST'));
+  const sluitpostVal=sluitpostRow?Number(sluitpostRow[2])||0:0;
 
   $('#view').innerHTML = `
   <div class="kpis">
@@ -316,7 +318,7 @@ function vDash(){
     <tr><th>Resultaat</th><th class="num ${mnd.resultaat>=0?'pos':'neg'}">${fmt(mnd.resultaat)}</th></tr></table></div>
   <div class="card"><h2>Balans (nu)</h2>
     ${balSection('Activa')}${balSection('RC-DGA')}${balSection('Passiva')}${balSection('Eigen vermogen')}
-    <p class="small mt">EV + resultaat boekjaar = ${fmt(R2(balTot['Eigen vermogen']+resTot))}. Beginbalans bevat een ⚠️-sluitpost — vervang de ⚠️-standen in de sheet door de echte 30-06-cijfers en draai "Herbereken sluitpost".</p></div>`;
+    <p class="small mt">EV + resultaat boekjaar = ${fmt(R2(balTot['Eigen vermogen']+resTot))}. ${Math.abs(sluitpostVal)<0.01?'Beginbalans sluit ✓ (sluitpost 0,00).':`Beginbalans bevat nog een ⚠️-sluitpost van ${fmt(sluitpostVal)} — vervang de ⚠️-standen in de sheet door de echte cijfers en draai "Herbereken sluitpost".`}</p></div>`;
 }
 
 /* ── VIEW: INVOER ───────────────────────────────────────────── */
