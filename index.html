@@ -47,6 +47,9 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .kpi .v{font-size:20px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
 .kpi .s{font-size:12px;color:var(--mut);margin-top:2px}
 .pos{color:var(--pos)} .neg{color:var(--neg)} .warn{color:var(--warn)}
+.rek{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px}
+tr.rek{text-decoration:none} tr.rek:active{opacity:.6}
+.kpi.click{cursor:pointer} .kpi.click:active{opacity:.7}
 .badge{display:inline-block;font-size:12px;font-weight:600;border-radius:99px;padding:2px 10px;background:var(--soft);color:var(--brand)}
 .badge.warn{background:var(--warnbg);color:var(--warn)}
 .badge.neg{background:rgba(180,35,42,.12);color:var(--neg)}
@@ -178,18 +181,21 @@ function expandTrans(r){
   const bedrag = Number(bedragRaw)||0;
   const code = (codeRaw===''||codeRaw==null) ? 9999 : Number(codeRaw);
   const sid = String(id||'');
-  if(sid.startsWith('1003~')) return [{code:1003, deb:bedrag},{code, deb:-bedrag}];
-  if(sid.startsWith('1709~')) return [{code:1709, deb:bedrag},{code, deb:-bedrag}];
+  // bank/CC-import: bijv. betaling van de OB-aangifte aan de Ontvanger, direct op 1641/1642
+  // gecodeerd — is een AFDRACHT van een eerdere periode, geen nieuwe OB-schuld van déze
+  // periode. bron:'bank' zodat vObAangifte dit uitsluit van "aan te geven deze periode".
+  if(sid.startsWith('1003~')) return [{code:1003, deb:bedrag, bron:'bank', oms},{code, deb:-bedrag, bron:'bank', oms}];
+  if(sid.startsWith('1709~')) return [{code:1709, deb:bedrag, bron:'bank', oms},{code, deb:-bedrag, bron:'bank', oms}];
   // POS~ / WEB~ / MAN~ : verkoop incl → clearing 1419
-  if(code===1720) return [{code:1720, deb:-bedrag},{code:1419, deb:bedrag}];
+  if(code===1720) return [{code:1720, deb:-bedrag, oms},{code:1419, deb:bedrag, oms}];
   const pct = Number(pctRaw)||0;
   const ob = (obRaw!==''&&obRaw!=null) ? Number(obRaw) : (pct>0 ? R2(bedrag - bedrag/(1+pct/100)) : 0);
-  const legs = [{code, deb:-(R2(bedrag-ob))}];
-  if(ob) legs.push({code: pct===9?1642:1641, deb:-ob});
-  legs.push({code:1419, deb:bedrag});
+  const legs = [{code, deb:-(R2(bedrag-ob)), oms}];
+  if(ob) legs.push({code: pct===9?1642:1641, deb:-ob, oms});
+  legs.push({code:1419, deb:bedrag, oms});
   return legs;
 }
-const expandMemo = r => [{code:Number(r[3]), deb:(Number(r[2])||0) * sgn(r[3])}];
+const expandMemo = r => [{code:Number(r[3]), deb:(Number(r[2])||0) * sgn(r[3]), oms:r[1]}];
 
 // alle benen t/m datum (of binnen [from,to] als from gegeven)
 function legs(from, to){
@@ -238,13 +244,15 @@ function nav(){
      ${id==='bonnen'&&openBonnen().length?`<span class="badge neg">${openBonnen().length}</span>`:''}</button>`).join('');
 }
 function go(v){ curView=v; render(); window.scrollTo(0,0); }
+let rekCode=null, rekBack='dash';
+function goRekening(code){ rekCode=Number(code); rekBack=curView; curView='rekening'; render(); window.scrollTo(0,0); }
 const openBonnen = () => D ? (D.bonnen||[]).filter(b=>['Nieuw',''].includes(String(b[5]))) : [];
 function render(){
   nav();
   if(!D && curView!=='meer'){ $('#view').innerHTML = `<div class="card"><h2>Welkom</h2>
     <p>Stel eerst de verbinding met je Google Sheet in.</p>
     <button class="primary mt" onclick="go('meer')">Naar instellingen →</button></div>`; return; }
-  ({dash:vDash, invoer:vInvoer, import:vImport, bonnen:vBonnen, meer:vMeer}[curView])();
+  ({dash:vDash, invoer:vInvoer, import:vImport, bonnen:vBonnen, meer:vMeer, rekening:vRekening}[curView])();
 }
 
 /* ── VIEW: DASHBOARD ────────────────────────────────────────── */
@@ -285,7 +293,7 @@ function vDash(){
     <div class="legend">${GROUPS.map(g=>`<span><i style="background:var(${g[2]})"></i>${g[0]}</span>`).join('')}</div>`;
 
   const wvRows=(obj,neg)=>Object.entries(obj).filter(([,v])=>Math.abs(v)>=0.005).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]))
-    .map(([c,v])=>`<tr><td>${c} ${esc(nameOf(c))}</td><td class="num ${neg?'':''}">${fmt(v)}</td></tr>`).join('');
+    .map(([c,v])=>`<tr class="rek" onclick="goRekening(${c})"><td>${c} ${esc(nameOf(c))}</td><td class="num ${neg?'':''}">${fmt(v)}</td></tr>`).join('');
 
   // balans
   const gr={'Activa':[], 'RC-DGA':[], 'Passiva':[], 'Eigen vermogen':[]};
@@ -293,32 +301,52 @@ function vDash(){
   const balTot={}; Object.keys(gr).forEach(t=>balTot[t]=R2(gr[t].reduce((a,[,v])=>a+v,0)));
   const resTot=R2(wv(start,null).resultaat);
   const balSection=t=>`<details><summary>${t} <span class="amount">${fmt(balTot[t])}</span></summary><table>`+
-    gr[t].sort((a,b)=>a[0]-b[0]).map(([c,v])=>`<tr><td>${c} ${esc(nameOf(c))}</td><td class="num">${fmt(v)}</td></tr>`).join('')+`</table></details>`;
+    gr[t].sort((a,b)=>a[0]-b[0]).map(([c,v])=>`<tr class="rek" onclick="goRekening(${c})"><td>${c} ${esc(nameOf(c))}</td><td class="num">${fmt(v)}</td></tr>`).join('')+`</table></details>`;
   const sluitpostRow=(D.beginbalans||[]).find(r=>String(r[1]).includes('SLUITPOST'));
   const sluitpostVal=sluitpostRow?Number(sluitpostRow[2])||0:0;
 
   $('#view').innerHTML = `
   <div class="kpis">
-    <div class="kpi"><div class="l">Resultaat sinds ${start.slice(5)===`07-01`?'1 juli':start}</div><div class="v ${ytd.resultaat>=0?'pos':'neg'}">${fmt(ytd.resultaat)}</div><div class="s">omzet ${fmt0(ytd.omzet)}</div></div>
-    <div class="kpi"><div class="l">Omzet ${monthName(dashMonth)}</div><div class="v">${fmt0(mnd.omzet)}</div><div class="s">resultaat ${fmt0(mnd.resultaat)}</div></div>
-    <div class="kpi"><div class="l">Bank (1003)</div><div class="v">${fmt(s[1003]||0)}</div><div class="s">kas ${fmt(s[1001]||0)}</div></div>
-    <div class="kpi"><div class="l">OB te betalen</div><div class="v">${fmt(ob)}</div><div class="s">6%: ${fmt0(s[1641]||0)} · 9%: ${fmt0(s[1642]||0)}</div></div>
-    <div class="kpi"><div class="l">Voorraad (1406)</div><div class="v">${fmt0(s[1406]||0)}</div><div class="s">RC-DGA ${fmt0(s[1301]||0)}</div></div>
+    <div class="kpi click" onclick="document.getElementById('wvCard').scrollIntoView({behavior:'smooth'})"><div class="l">Resultaat sinds ${start.slice(5)===`07-01`?'1 juli':start}</div><div class="v ${ytd.resultaat>=0?'pos':'neg'}">${fmt(ytd.resultaat)}</div><div class="s">omzet ${fmt0(ytd.omzet)}</div></div>
+    <div class="kpi click" onclick="document.getElementById('wvCard').scrollIntoView({behavior:'smooth'})"><div class="l">Omzet ${monthName(dashMonth)}</div><div class="v">${fmt0(mnd.omzet)}</div><div class="s">resultaat ${fmt0(mnd.resultaat)}</div></div>
+    <div class="kpi click" onclick="goRekening(1003)"><div class="l">Bank (1003)</div><div class="v">${fmt(s[1003]||0)}</div><div class="s">kas <span class="rek" onclick="event.stopPropagation();goRekening(1001)">${fmt(s[1001]||0)}</span></div></div>
+    <div class="kpi click" onclick="goRekening(1641)"><div class="l">OB te betalen</div><div class="v">${fmt(ob)}</div><div class="s">6%: <span class="rek" onclick="event.stopPropagation();goRekening(1641)">${fmt0(s[1641]||0)}</span> · 9%: <span class="rek" onclick="event.stopPropagation();goRekening(1642)">${fmt0(s[1642]||0)}</span></div></div>
+    <div class="kpi click" onclick="goRekening(1406)"><div class="l">Voorraad (1406)</div><div class="v">${fmt0(s[1406]||0)}</div><div class="s">RC-DGA <span class="rek" onclick="event.stopPropagation();goRekening(1301)">${fmt0(s[1301]||0)}</span></div></div>
     <div class="kpi"><div class="l">Controles</div>
       <div class="s">Balansverschil <b class="${clr(Math.abs(bv)<0.01)}">${fmt(bv)}</b></div>
-      <div class="s">1419 <b class="${clr(Math.abs(sM[1419]||0)<1)}">${fmt(sM[1419]||0)}</b> · 1417 <b class="${clr(Math.abs(sM[1417]||0)<200)}">${fmt(sM[1417]||0)}</b> <span class="small">(per ${monthEnd(dashMonth).slice(8)}-${dashMonth.slice(5,7)})</span></div>
+      <div class="s">1419 <b class="${clr(Math.abs(sM[1419]||0)<1)} rek" onclick="goRekening(1419)">${fmt(sM[1419]||0)}</b> · 1417 <b class="${clr(Math.abs(sM[1417]||0)<200)} rek" onclick="goRekening(1417)">${fmt(sM[1417]||0)}</b> <span class="small">(per ${monthEnd(dashMonth).slice(8)}-${dashMonth.slice(5,7)})</span></div>
       <div class="s">${teCoderen?`<span class="badge warn">${teCoderen} te coderen</span>`:'<span class="badge">alles gecodeerd ✓</span>'}
       ${factOpen.length?` <span class="badge">${factOpen.length} open facturen · ${fmt0(factBedrag)}</span>`:''}</div>
       ${factOpen.length?`<div class="s small">facturen tellen pas mee bij betaling (kasstelsel)</div>`:''}</div>
   </div>
   <div class="card"><h2>Omzet per maand</h2>${chart}</div>
-  <div class="card"><h2>W&V · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="dashMonth=this.value;render()">${monthOptions(dashMonth)}</select></h2>
+  <div class="card" id="wvCard"><h2>W&V · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="dashMonth=this.value;render()">${monthOptions(dashMonth)}</select></h2>
     <table><tr><th>Omzet</th><th class="num">${fmt(mnd.omzet)}</th></tr>${wvRows(mnd.om)}
     <tr><th>Kosten</th><th class="num">${fmt(mnd.kosten)}</th></tr>${wvRows(mnd.ko,1)}
     <tr><th>Resultaat</th><th class="num ${mnd.resultaat>=0?'pos':'neg'}">${fmt(mnd.resultaat)}</th></tr></table></div>
   <div class="card"><h2>Balans (nu)</h2>
     ${balSection('Activa')}${balSection('RC-DGA')}${balSection('Passiva')}${balSection('Eigen vermogen')}
     <p class="small mt">EV + resultaat boekjaar = ${fmt(R2(balTot['Eigen vermogen']+resTot))}. ${Math.abs(sluitpostVal)<0.01?'Beginbalans sluit ✓ (sluitpost 0,00).':`Beginbalans bevat nog een ⚠️-sluitpost van ${fmt(sluitpostVal)} — vervang de ⚠️-standen in de sheet door de echte cijfers en draai "Herbereken sluitpost".`}</p></div>`;
+}
+
+/* ── VIEW: REKENING (drill-down vanuit tegels/balans/W&V) ────── */
+function vRekening(){
+  const code=rekCode;
+  const s=saldi(null);
+  const rows=legs(null,null).filter(l=>l.code===code).sort((a,b)=>a.datum<b.datum?-1:a.datum>b.datum?1:0);
+  let run=beginSaldi()[code]||0;
+  const trs=rows.map(l=>{ const mut=R2(l.deb*sgn(code)); run=R2(run+mut); return {...l, mut, run}; });
+  $('#view').innerHTML = `
+  <div class="card">
+    <button onclick="go('${rekBack}')">← Terug</button>
+    <h2 class="mt">${code} · ${esc(nameOf(code))}</h2>
+    <div class="kpi"><div class="l">Huidig saldo</div><div class="v">${fmt(s[code]||0)}</div></div>
+    <div style="overflow:auto;max-height:65vh" class="mt"><table>
+      <tr><th>Datum</th><th>Omschrijving</th><th class="num">Mutatie</th><th class="num">Saldo</th></tr>
+      ${trs.length?trs.map(l=>`<tr><td>${l.datum}</td><td>${esc(l.oms||'')}</td><td class="num">${fmt(l.mut)}</td><td class="num">${fmt(l.run)}</td></tr>`).join('')
+        :'<tr><td colspan="4" class="small">Geen mutaties in deze periode.</td></tr>'}
+    </table></div>
+  </div>`;
 }
 
 /* ── VIEW: INVOER ───────────────────────────────────────────── */
@@ -841,16 +869,20 @@ function vMeer(){
   ({afsluiting:vAfsluiting, obaangifte:vObAangifte, coderen:vCoderen, regels:vRegels, instellingen:vInstellingen}[meerTab])();
 }
 
-/* — OB-aangifte-overzicht: per maand wat je moet aangeven (netto-mutatie van
-   1641/1642 díe maand — omzet-OB min wat er al via OB-import-verrekening of
-   Memoriaal-correcties vanaf is — niet de cumulatieve stand, die staat er ook
-   bij ter controle). */
+/* — OB-aangifte-overzicht: per maand wat je moet aangeven (omzet-OB uit verkopen/facturen
+   díe maand, min een eventuele OB-import-verrekening — NIET de bank-betalingen aan de
+   Ontvanger, want die horen bij de máánd waarin de aangifte over gaat, niet bij de maand
+   waarin je toevallig betaalt (meestal medio de volgende maand). Bank-betalingen tellen wel
+   mee in de cumulatieve stand hieronder. bron:'bank'-legs (zie expandTrans) worden daarom
+   hier uitgesloten van de periodemutatie, maar wel los getoond ter controle. */
 function vObAangifte(){
   if(!D){ $('#meerBody').innerHTML='<div class="card">Eerst verbinden.</div>'; return; }
   const m=wizMonth, mFrom=m+'-01', mTo=monthEnd(m);
   const periodeLegs=legs(mFrom, mTo);
-  const mutatie=code=>R2(periodeLegs.filter(l=>l.code===code).reduce((a,l)=>a+l.deb*sgn(code),0));
+  const mutatie=code=>R2(periodeLegs.filter(l=>l.code===code && l.bron!=='bank').reduce((a,l)=>a+l.deb*sgn(code),0));
+  const betaald=code=>R2(periodeLegs.filter(l=>l.code===code && l.bron==='bank').reduce((a,l)=>a+l.deb*sgn(code),0));
   const ob6=mutatie(1641), ob9=mutatie(1642);
+  const betaald6=betaald(1641), betaald9=betaald(1642);
   const eind=saldi(mTo);
   const obImportTag=`[OB-import ${m}]`;
   const obImportGedaan=memoTagExists(obImportTag);
@@ -862,8 +894,12 @@ function vObAangifte(){
       <div class="kpi"><div class="l">OB 9%</div><div class="v">${fmt(ob9)}</div></div>
       <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(R2(ob6+ob9))}</div></div>
     </div>
-    <p class="small mt">Dit is de netto-mutatie van 1641/1642 binnen deze maand — inclusief een eventuele
-    OB-import-verrekening die je deze maand al geboekt hebt.</p></div>
+    <p class="small mt">Dit is de OB uit verkopen/facturen van deze maand, inclusief een eventuele
+    OB-import-verrekening die je deze maand al geboekt hebt. Bank-betalingen van de aangifte aan
+    de Ontvanger tellen hier niet in mee.</p>
+    ${(betaald6||betaald9)?`<p class="small mt">Ter info: deze maand is er ook ${fmt(R2(betaald6+betaald9))}
+    aan OB via de bank afgedragen (6%: ${fmt(betaald6)} · 9%: ${fmt(betaald9)}) — dat verlaagt de
+    cumulatieve stand hieronder, maar niet het aan-te-geven-bedrag hierboven.</p>`:''}</div>
   <div class="step"><h3>${obImportGedaan?'✅':'⚠️'} OB-import-verrekening (CCS-facturen)</h3>
     <p class="small">${obImportGedaan?`${obImportTag} staat al in het memoriaal.`:`Nog niet gedaan voor ${monthName(m)} — vergeet niet eerst de CCS-facturen van deze maand te verrekenen via ➕ Invoer → OB-import, vóórdat je aangifte doet.`}</p></div>
   <div class="step"><h3>Cumulatieve stand (ter controle, niet het aangiftebedrag)</h3>
