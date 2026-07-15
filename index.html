@@ -888,28 +888,81 @@ function vMeer(){
 function vObAangifte(){
   if(!D){ $('#meerBody').innerHTML='<div class="card">Eerst verbinden.</div>'; return; }
   const m=wizMonth, mFrom=m+'-01', mTo=monthEnd(m);
+  const inPeriode = d => { const s=String(d).slice(0,10); return s>=mFrom && s<=mTo; };
+
+  // Omzet + verschuldigde OB per tarief, uitsluitend uit verkopen (Transacties), 0% incluis —
+  // voor de omzet-vakjes op het aangifteformulier. Bank/CC-doorloopbenen (1003~/1709~) tellen
+  // niet mee (geen omzet). Rijen op ⚠️ Controleren gaan apart, want die zijn nog niet beoordeeld
+  // op tarief en horen niet blind als 0% meegeteld te worden.
+  const omzet={0:0,6:0,9:0}, obVerkoop={6:0,9:0};
+  let nogTeBeoordelen=0;
+  (D.transacties||[]).forEach(r=>{
+    if(!inPeriode(r[0])) return;
+    const sid=String(r[7]||'');
+    if(sid.startsWith('1003~')||sid.startsWith('1709~')) return;
+    const codeRaw=r[3];
+    if(codeRaw===''||codeRaw==null) return;
+    const code=Number(codeRaw);
+    if(typeOf(code)!=='Omzet') return;
+    const bedrag=Number(r[2])||0;
+    if(String(r[6]||'').indexOf('Controleren')>-1){ nogTeBeoordelen=R2(nogTeBeoordelen+bedrag); return; }
+    const pctRaw=r[4];
+    const pct=(pctRaw===''||pctRaw==null)?0:Number(pctRaw);
+    const obRaw=r[5];
+    const ob=(obRaw!==''&&obRaw!=null)?Number(obRaw):(pct>0?R2(bedrag-bedrag/(1+pct/100)):0);
+    const netto=R2(bedrag-ob);
+    const bucket=(pct===6||pct===9)?pct:0;
+    omzet[bucket]=R2((omzet[bucket]||0)+netto);
+    if(pct===6) obVerkoop[6]=R2(obVerkoop[6]+ob);
+    if(pct===9) obVerkoop[9]=R2(obVerkoop[9]+ob);
+  });
+  const omzetTotaal=R2(omzet[0]+omzet[6]+omzet[9]);
+  const verschuldigd6=obVerkoop[6], verschuldigd9=obVerkoop[9], verschuldigdTotaal=R2(verschuldigd6+verschuldigd9);
+
+  // Aftrek/verrekening deze periode: alle Memoriaal-boekingen op 1641/1642 (bv. OB-import-
+  // verrekening CCS-facturen). Present-termen: negatief bedrag op deze rekening = minder OB
+  // te betalen = aftrek. Alleen als voorstel voor het invulveld hieronder — jij vult het
+  // uiteindelijke aftrekbedrag voor de aangifte zelf in.
+  let aftrekAuto=0;
+  (D.memoriaal||[]).forEach(r=>{
+    if(!inPeriode(r[0])) return;
+    const code=Number(r[3]);
+    if(code!==1641 && code!==1642) return;
+    aftrekAuto=R2(aftrekAuto-(Number(r[2])||0));
+  });
+
   const periodeLegs=legs(mFrom, mTo);
-  const mutatie=code=>R2(periodeLegs.filter(l=>l.code===code && l.bron!=='bank').reduce((a,l)=>a+l.deb*sgn(code),0));
   const betaald=code=>R2(periodeLegs.filter(l=>l.code===code && l.bron==='bank').reduce((a,l)=>a+l.deb*sgn(code),0));
-  const ob6=mutatie(1641), ob9=mutatie(1642);
   const betaald6=betaald(1641), betaald9=betaald(1642);
   const eind=saldi(mTo);
   const obImportTag=`[OB-import ${m}]`;
   const obImportGedaan=memoTagExists(obImportTag);
   $('#meerBody').innerHTML=`
   <div class="card"><h2>OB-aangifte · <select style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select></h2>
-  <div class="step"><h3>Aan te geven deze periode (${monthName(m)})</h3>
+  <div class="step"><h3>Omzet deze periode (${monthName(m)})</h3>
     <div class="kpis">
-      <div class="kpi"><div class="l">OB 6%</div><div class="v">${fmt(ob6)}</div></div>
-      <div class="kpi"><div class="l">OB 9%</div><div class="v">${fmt(ob9)}</div></div>
-      <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(R2(ob6+ob9))}</div></div>
+      <div class="kpi"><div class="l">Omzet 0%</div><div class="v">${fmt(omzet[0])}</div></div>
+      <div class="kpi"><div class="l">Omzet 6%</div><div class="v">${fmt(omzet[6])}</div></div>
+      <div class="kpi"><div class="l">Omzet 9%</div><div class="v">${fmt(omzet[9])}</div></div>
+      <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(omzetTotaal)}</div></div>
     </div>
-    <p class="small mt">Dit is de OB uit verkopen/facturen van deze maand, inclusief een eventuele
-    OB-import-verrekening die je deze maand al geboekt hebt. Bank-betalingen van de aangifte aan
-    de Ontvanger tellen hier niet in mee.</p>
-    ${(betaald6||betaald9)?`<p class="small mt">Ter info: deze maand is er ook ${fmt(R2(betaald6+betaald9))}
-    aan OB via de bank afgedragen (6%: ${fmt(betaald6)} · 9%: ${fmt(betaald9)}) — dat verlaagt de
-    cumulatieve stand hieronder, maar niet het aan-te-geven-bedrag hierboven.</p>`:''}</div>
+    ${nogTeBeoordelen?`<p class="small warn mt">⚠️ ${fmt(nogTeBeoordelen)} staat nog op ⚠️ Controleren
+    (nog geen tarief bepaald) en zit niet in de omzet hierboven — codeer die eerst via ⋯ Meer → ❓ Te coderen
+    of het tarief van die regel(s), anders klopt de omzetopgave niet.</p>`:''}</div>
+  <div class="step"><h3>Verschuldigde OB (bruto, vóór aftrek)</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="l">OB 6%</div><div class="v">${fmt(verschuldigd6)}</div></div>
+      <div class="kpi"><div class="l">OB 9%</div><div class="v">${fmt(verschuldigd9)}</div></div>
+      <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(verschuldigdTotaal)}</div></div>
+    </div>
+    <p class="small mt">Dit is de OB puur uit verkopen/facturen van deze maand, zonder aftrek.</p></div>
+  <div class="step"><h3>Aftrek / verrekening</h3>
+    <p class="small">Voorstel op basis van Memoriaal-correcties op 1641/1642 deze maand (bv. OB-import-
+    verrekening CCS-facturen): <b>${fmt(aftrekAuto)}</b>. Vul hieronder het bedrag in dat je op de
+    aangifte als aftrek opgeeft — dit is een los invulveld, het past niets in de boekhouding aan.</p>
+    <label>Aftrek voor de aangifte (ƒ)</label>
+    <input type="number" step="0.01" id="obAftrekInput" inputmode="decimal" value="${aftrekAuto}">
+    <p class="small mt">Per saldo te betalen: <b id="obPerSaldo">${fmt(R2(verschuldigdTotaal-aftrekAuto))}</b></p></div>
   <div class="step"><h3>${obImportGedaan?'✅':'⚠️'} OB-import-verrekening (CCS-facturen)</h3>
     <p class="small">${obImportGedaan?`${obImportTag} staat al in het memoriaal.`:`Nog niet gedaan voor ${monthName(m)} — vergeet niet eerst de CCS-facturen van deze maand te verrekenen via ➕ Invoer → OB-import, vóórdat je aangifte doet.`}</p></div>
   <div class="step"><h3>Cumulatieve stand (ter controle, niet het aangiftebedrag)</h3>
@@ -917,8 +970,12 @@ function vObAangifte(){
     1642 (9%) tot en met ${mTo}: <b>${fmt(eind[1642]||0)}</b></p>
     <p class="small">Dit is alles wat ooit is opgebouwd minus wat al is afgedragen/verrekend — hoort
     naar 0 te lopen na betaling van de aangifte via de bank (codeer die betaling in de bank-import
-    rechtstreeks op 1641/1642, net als bij 1417).</p></div>
+    rechtstreeks op 1641/1642, net als bij 1417).</p>
+    ${(betaald6||betaald9)?`<p class="small mt">Ter info: deze maand is er ook ${fmt(R2(betaald6+betaald9))}
+    aan OB via de bank afgedragen (6%: ${fmt(betaald6)} · 9%: ${fmt(betaald9)}) — dat verlaagt de
+    cumulatieve stand hierboven.</p>`:''}</div>
   </div>`;
+  $('#obAftrekInput').oninput=()=>{ const a=Number($('#obAftrekInput').value)||0; $('#obPerSaldo').textContent=fmt(R2(verschuldigdTotaal-a)); };
 }
 
 /* — controles (was maandafsluiting-wizard; de boekingsstappen zijn vervallen
