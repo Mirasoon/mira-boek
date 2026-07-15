@@ -557,36 +557,46 @@ async function loonSubmit(){
    op de aangifte. Vul het TOTAALBEDRAG in (som van alle CCS-facturen die
    maand) — de app trekt zelf de helft van 1406 af en van 1641 (6%), altijd
    in balans, geen 1410-tussenstap nodig. */
+let obiRows=[];
 function fObImport(){
   const m=wizMonth;
   const tag=`[OB-import ${m}]`;
   const done=memoTagExists(tag);
+  if(!obiRows.length) obiRows=[{}];
+  const totaal=R2(obiRows.reduce((a,r)=>a+(Number(r.bedrag)||0),0));
   $('#invForm').innerHTML=`
   <h2>OB on import — CCS-facturen</h2>
-  <p class="small">Tel de "OB on import"-regels van alle Caribbean Cargo-facturen deze maand op en vul
-  hier het TOTAALBEDRAG in — de helft daarvan is verrekenbaar. Boekt: −helft op 1406 Voorraad
-  (haalt het verrekenbare deel uit de voorraadkost), −helft op 1641 OB 6% te betalen. De andere helft
-  blijft gewoon in 1406 staan (is dan echte voorraadkost).</p>
+  <p class="small">Eén regel per CCS-factuur/bonnummer — de app telt het totaal zelf op. De helft
+  daarvan is verrekenbaar. Boekt: −helft op 1406 Voorraad (haalt het verrekenbare deel uit de
+  voorraadkost), −helft op 1641 OB 6% te betalen. De andere helft blijft gewoon in 1406 staan (is
+  dan echte voorraadkost). De bonnummers worden bewaard in de opmerking, ter referentie voor de admin.</p>
   <label>Maand</label><select id="obiMaand" style="width:auto;display:inline-block;padding:4px 8px" onchange="wizMonth=this.value;render()">${monthOptions(m)}</select>
   ${done?`<p class="msg ok mt">${tag} staat al in het memoriaal.</p>`:`
-  <label>Totaalbedrag OB on import deze maand (ƒ)</label><input type="number" step="0.01" id="obiTotaal" inputmode="decimal">
-  <p class="small" id="obiPreview"></p>
+  ${obiRows.map((r,i)=>`<div class="row mt">
+    <div style="flex:2"><input placeholder="Bonnummer CCS" value="${esc(r.bon||'')}" onchange="obiRows[${i}].bon=this.value;render()"></div>
+    <div style="flex:1"><input type="number" step="0.01" placeholder="Bedrag" value="${r.bedrag??''}" inputmode="decimal" onchange="obiRows[${i}].bedrag=this.value;render()"></div>
+  </div>`).join('')}
+  <div class="row mt"><button onclick="obiRows.push({});render()">+ regel</button>
+  <button onclick="obiRows.length>1&&obiRows.pop();render()">− regel</button></div>
+  <p class="small mt">Totaal: <b>${fmt(totaal)}</b> · Verrekenbaar (helft): <b>${fmt(R2(totaal/2))}</b></p>
   <div id="obiMsg"></div>
-  <button class="primary mt" style="width:100%" onclick="obImportSubmit('${tag}','${m}')">Boeken</button>`}`;
-  if(!done) $('#obiTotaal').oninput=()=>{ const t=Number($('#obiTotaal').value)||0; $('#obiPreview').textContent = t? `Verrekenbaar (helft): ${fmt(R2(t/2))}` : ''; };
+  <button class="primary mt" style="width:100%" onclick="obImportSubmit('${tag}','${m}')" ${totaal>0?'':'disabled'}>Boeken</button>`}`;
 }
 async function obImportSubmit(tag, maand){
   try{
-    const totaal=Number($('#obiTotaal').value)||0;
-    if(totaal<=0) throw new Error('Vul het totaalbedrag in');
+    const geldig=obiRows.filter(r=>Number(r.bedrag)>0);
+    const totaal=R2(geldig.reduce((a,r)=>a+Number(r.bedrag),0));
+    if(totaal<=0) throw new Error('Vul minstens één regel met een bedrag in');
     const helft=R2(totaal/2);
     const datum=maand+'-01';
+    const bonnen=geldig.map(r=>(r.bon||'').trim()).filter(Boolean).join(', ');
+    const opmerking='ob-import'+(bonnen?` · bonnen: ${bonnen}`:'');
     const rows=[
-      {datum, omschrijving:`${tag} verrekening OB on import (helft van ${fmt(totaal)})`, bedrag:-helft, code:1406, opmerking:'ob-import'},
-      {datum, omschrijving:`${tag} verrekening OB on import (helft van ${fmt(totaal)})`, bedrag:-helft, code:1641, opmerking:'ob-import'},
+      {datum, omschrijving:`${tag} verrekening OB on import (helft van ${fmt(totaal)})`, bedrag:-helft, code:1406, opmerking},
+      {datum, omschrijving:`${tag} verrekening OB on import (helft van ${fmt(totaal)})`, bedrag:-helft, code:1641, opmerking},
     ];
     await api('addMemoriaal',{rows, tag});
-    toast(tag+' geboekt ✓'); refresh();
+    toast(tag+' geboekt ✓'); obiRows=[]; refresh();
   }catch(e){ $('#obiMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
 }
 
