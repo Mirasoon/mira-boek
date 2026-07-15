@@ -890,12 +890,14 @@ function vObAangifte(){
   const m=wizMonth, mFrom=m+'-01', mTo=monthEnd(m);
   const inPeriode = d => { const s=String(d).slice(0,10); return s>=mFrom && s<=mTo; };
 
-  // Omzet + verschuldigde OB per tarief, uitsluitend uit rijen op een Omzet-rekening, 0% incluis —
-  // voor de omzet-vakjes op het aangifteformulier. Ook bank/CC-rijen (1003~/1709~) tellen mee als
-  // ze rechtstreeks op een omzetrekening geboekt zijn (bv. verzekeraars/patiënten die per bank
-  // betalen op 8010) — alleen bank-rijen naar een niet-Omzet-rekening vallen al buiten de
-  // typeOf-check hieronder. Rijen op ⚠️ Controleren gaan apart, want die zijn nog niet beoordeeld
-  // en horen niet blind meegeteld te worden.
+  // Omzet + verschuldigde OB per tarief, uit alle rijen op een Omzet-rekening — zowel Transacties
+  // (bank/CC-rijen incluis, bv. verzekeraars/patiënten die per bank betalen op 8010) als Memoriaal
+  // (NL-inkomsten, Pin-vereffening — die hebben geen pct-veld, dus vallen terug op het standaard-
+  // tarief van de rekening zelf). ⚠️ Controleren-rijen tellen gewoon mee in het totaal (bevestigd
+  // door de eigenaar: die vlag betekent niet "onzeker tarief") maar worden er als aparte info-regel
+  // uitgelicht zodat duidelijk blijft wat nog een check verdient.
+  const OMZET_TARIEF_DEFAULT={8005:9, 8010:0, 8013:6, 8017:6, 8020:6};
+  const tariefVoor=(code,pctRaw)=>(pctRaw===''||pctRaw==null)?(OMZET_TARIEF_DEFAULT[code]??0):Number(pctRaw);
   const omzet={0:0,6:0,9:0}, obVerkoop={6:0,9:0};
   let nogTeBeoordelen=0;
   (D.transacties||[]).forEach(r=>{
@@ -905,9 +907,8 @@ function vObAangifte(){
     const code=Number(codeRaw);
     if(typeOf(code)!=='Omzet') return;
     const bedrag=Number(r[2])||0;
-    if(String(r[6]||'').indexOf('Controleren')>-1){ nogTeBeoordelen=R2(nogTeBeoordelen+bedrag); return; }
-    const pctRaw=r[4];
-    const pct=(pctRaw===''||pctRaw==null)?0:Number(pctRaw);
+    if(String(r[6]||'').indexOf('Controleren')>-1) nogTeBeoordelen=R2(nogTeBeoordelen+bedrag);
+    const pct=tariefVoor(code, r[4]);
     const obRaw=r[5];
     const ob=(obRaw!==''&&obRaw!=null)?Number(obRaw):(pct>0?R2(bedrag-bedrag/(1+pct/100)):0);
     const netto=R2(bedrag-ob);
@@ -915,6 +916,16 @@ function vObAangifte(){
     omzet[bucket]=R2((omzet[bucket]||0)+netto);
     if(pct===6) obVerkoop[6]=R2(obVerkoop[6]+ob);
     if(pct===9) obVerkoop[9]=R2(obVerkoop[9]+ob);
+  });
+  (D.memoriaal||[]).forEach(r=>{
+    if(!inPeriode(r[0])) return;
+    const code=Number(r[3]);
+    if(typeOf(code)!=='Omzet') return;
+    const bedrag=Number(r[2])||0; // present-term: positief = meer omzet, geen sgn nodig
+    const pct=tariefVoor(code, '');
+    const bucket=(pct===6||pct===9)?pct:0;
+    omzet[bucket]=R2((omzet[bucket]||0)+bedrag);
+    // Memoriaal-omzet draagt nooit apart OB af (geen 1641/1642-boeking erbij), dus geen obVerkoop-effect.
   });
   const omzetTotaal=R2(omzet[0]+omzet[6]+omzet[9]);
   const verschuldigd6=obVerkoop[6], verschuldigd9=obVerkoop[9], verschuldigdTotaal=R2(verschuldigd6+verschuldigd9);
@@ -946,9 +957,8 @@ function vObAangifte(){
       <div class="kpi"><div class="l">Omzet 9%</div><div class="v">${fmt(omzet[9])}</div></div>
       <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(omzetTotaal)}</div></div>
     </div>
-    ${nogTeBeoordelen?`<p class="small warn mt">⚠️ ${fmt(nogTeBeoordelen)} staat nog op ⚠️ Controleren
-    (nog geen tarief bepaald) en zit niet in de omzet hierboven — codeer die eerst via ⋯ Meer → ❓ Te coderen
-    of het tarief van die regel(s), anders klopt de omzetopgave niet.</p>`:''}</div>
+    ${nogTeBeoordelen?`<p class="small warn mt">ℹ️ Hiervan staat ${fmt(nogTeBeoordelen)} nog op ⚠️ Controleren
+    — zit al gewoon in de omzet hierboven, maar verdient nog een check (bv. bedrag/koppeling verifiëren).</p>`:''}</div>
   <div class="step"><h3>Verschuldigde OB (bruto, vóór aftrek)</h3>
     <div class="kpis">
       <div class="kpi"><div class="l">OB 6%</div><div class="v">${fmt(verschuldigd6)}</div></div>
