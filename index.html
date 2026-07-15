@@ -890,16 +890,16 @@ function vObAangifte(){
   const m=wizMonth, mFrom=m+'-01', mTo=monthEnd(m);
   const inPeriode = d => { const s=String(d).slice(0,10); return s>=mFrom && s<=mTo; };
 
-  // Omzet + verschuldigde OB per tarief, uitsluitend uit verkopen (Transacties), 0% incluis —
-  // voor de omzet-vakjes op het aangifteformulier. Bank/CC-doorloopbenen (1003~/1709~) tellen
-  // niet mee (geen omzet). Rijen op ⚠️ Controleren gaan apart, want die zijn nog niet beoordeeld
-  // op tarief en horen niet blind als 0% meegeteld te worden.
+  // Omzet + verschuldigde OB per tarief, uitsluitend uit rijen op een Omzet-rekening, 0% incluis —
+  // voor de omzet-vakjes op het aangifteformulier. Ook bank/CC-rijen (1003~/1709~) tellen mee als
+  // ze rechtstreeks op een omzetrekening geboekt zijn (bv. verzekeraars/patiënten die per bank
+  // betalen op 8010) — alleen bank-rijen naar een niet-Omzet-rekening vallen al buiten de
+  // typeOf-check hieronder. Rijen op ⚠️ Controleren gaan apart, want die zijn nog niet beoordeeld
+  // en horen niet blind meegeteld te worden.
   const omzet={0:0,6:0,9:0}, obVerkoop={6:0,9:0};
   let nogTeBeoordelen=0;
   (D.transacties||[]).forEach(r=>{
     if(!inPeriode(r[0])) return;
-    const sid=String(r[7]||'');
-    if(sid.startsWith('1003~')||sid.startsWith('1709~')) return;
     const codeRaw=r[3];
     if(codeRaw===''||codeRaw==null) return;
     const code=Number(codeRaw);
