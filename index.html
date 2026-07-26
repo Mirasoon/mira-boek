@@ -271,7 +271,7 @@ function vDash(){
   const sM = saldi(mTo);
   const ob = R2((s[1641]||0)+(s[1642]||0));
   const teCoderen = (D.transacties||[]).filter(r=>r[3]===''||Number(r[3])===9999).length;
-  const factOpen = (D.facturen||[]).filter(f=>String(f[7])!=='Betaald');
+  const factOpen = (D.facturen||[]).filter(f=>String(f[7])!=='Betaald'&&String(f[7])!=='Geannuleerd');
   const factBedrag = R2(factOpen.reduce((a,f)=>a+(Number(f[3])||0)-(Number(f[6])||0),0));
   const bv = balansverschil();
   const clr = ok => ok?'pos':'warn';
