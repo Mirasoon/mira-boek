@@ -1065,7 +1065,7 @@ function vAfsluiting(){
 /* — te coderen — */
 let tcTarget=null;
 function vCoderen(){
-  const items=(D.transacties||[]).map((r,i)=>({r,i})).filter(({r})=>r[3]===''||Number(r[3])===9999).reverse();
+  const items=(D.transacties||[]).map((r,i)=>({r,i})).filter(({r})=>(r[3]===''||Number(r[3])===9999)&&!String(r[6]).startsWith('Vervangen')).reverse();
   $('#meerBody').innerHTML=`<div class="card"><h2>Te coderen (9999) · ${items.length}</h2>
   ${items.length?'':'<p class="small">Niets te coderen 🎉</p>'}
   ${items.map(({r})=>`<div class="list-item"><div class="grow">
