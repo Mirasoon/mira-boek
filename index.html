@@ -708,6 +708,44 @@ function parseDate(s, df){
   }
   return null;
 }
+/* — auto-split pinbatch-afstortingen (MCB) — een MCB-bankregel voor een kaartlezer-afstorting
+   toont zelf al bruto/commissie/OB in de omschrijving (bv. "XCG 838,50 COMM. 8,39 / NAOB TAX
+   0,50"), maar komt binnen als ÉÉN nettobedrag. Elke afstorting heeft een uniek batchnummer
+   (BTC#), dus een simpele tekstregel matcht 'm nooit twee keer — dit reconstrueert daarom zelf
+   de bruto/kosten-split (net als de eenmalige jan-juni-hersteldata: bruto → 1417
+   Kaartontvangsten onderweg, kosten incl. OB → 4401 Bank Service Charges), i.p.v. dat de regel
+   iedere import weer als "Te coderen" (9999) blijft liggen. Bij een USD-batch staat de
+   commissie ook in USD; de verhouding commissie/nettobedrag (in USD) wordt toegepast op het
+   werkelijke XCG-bedrag om de split te reconstrueren zonder een aparte wisselkoers te gokken. */
+const CARD_LABEL={'MMDT LC':'Maestro','MUDT LC':'Maestro','MCDT LC':'Mastercard','MC DT':'Mastercard',
+  'MASTERC':'Mastercard','VISA DT':'Visa','VISA':'Visa','KL':'Kaart','VSDC LC':'Kaart'};
+const CARD_PAT1=/^(MMDT LC|MUDT LC|MCDT LC|MC DT|MASTERC|VISA DT|VISA|KL|VSDC LC)\s*EDC BTC#\s*\d+\s*TID#\s*\d+\s*\/\s*(XCG|USD)\s*([\d.,]+)\s*COMM\.?\s*([\d.,]+)\s*\/\s*NAOB TAX\s*([\d.,]+)/i;
+const CARD_PAT2=/^MAESTRO\s+(XCG|USD)\s+\d+\s+\d+\s*\/\s*MAESTRO COMM\.?\s*([\d.,]+)/i;
+function splitCardBatch(oms, bedragAbs){
+  let m=oms.match(CARD_PAT1);
+  if(m){
+    const label=CARD_LABEL[m[1].toUpperCase()]||'Kaart';
+    const cur=m[2].toUpperCase();
+    const grossStated=parseAmt(m[3]), comm=parseAmt(m[4]), tax=parseAmt(m[5]);
+    if(isNaN(grossStated)||isNaN(comm)||isNaN(tax)) return null;
+    let gross, fee;
+    if(cur==='XCG'){
+      gross=R2(grossStated); fee=R2(comm+tax);
+      if(Math.abs((gross-fee)-bedragAbs)>0.02) return null;
+    } else {
+      const netStated=grossStated-comm-tax;
+      if(netStated<=0) return null;
+      fee=R2(bedragAbs*(comm+tax)/netStated); gross=R2(bedragAbs+fee);
+    }
+    return {label, gross, fee};
+  }
+  m=oms.match(CARD_PAT2);
+  if(m){
+    const comm=parseAmt(m[2]); if(isNaN(comm)) return null;
+    return {label:'Maestro', gross:R2(bedragAbs+comm), fee:R2(comm)};
+  }
+  return null;
+}
 function impBuild(){
   const m=importCtx.map={ datum:$('#cDatum').value, oms:$('#cOms').value, oms2:$('#cOms2').value,
     bedrag:$('#cBedrag').value, af:$('#cAf').value, bij:$('#cBij').value, df:$('#cDf').value };
@@ -731,6 +769,17 @@ function impBuild(){
     seen[key]=(seen[key]||0)+1;
     const id=`${key}~${seen[key]}`;
     const dup=existing.has(id);
+    if(impMode==='bank' && !skip && bedrag>0){
+      const sp=splitCardBatch(oms, bedrag);
+      if(sp){
+        const idB=id+'-B', idK=id+'-K';
+        items.push({datum, oms:`Kaartontvangsten ${sp.label} (bruto) — ${oms}`, bedrag:sp.gross, code:1417,
+          id:idB, dup:existing.has(idB), skip:false, skipWhy:'', status:'✅ Kaart (bruto)', autoSplit:true});
+        items.push({datum, oms:`Bankkosten ${sp.label} (incl. OB) — ${oms}`, bedrag:-sp.fee, code:4401,
+          id:idK, dup:existing.has(idK), skip:false, skipWhy:'', status:'✅ Kaart (kosten)', autoSplit:true});
+        return;
+      }
+    }
     const code=matchRule(oms);
     items.push({datum, oms, bedrag, code, id, dup, skip, skipWhy});
   });
@@ -741,7 +790,7 @@ function impStepPreview(){
   const nieuw=it.filter(x=>!x.dup&&!x.skip);
   const rows=it.map((x,i)=>`<tr style="${x.dup||x.skip?'opacity:.45':''}">
     <td><input type="checkbox" ${x.dup||x.skip?'':'checked'} ${x.dup?'disabled':''} onchange="importCtx.items[${i}].skip=!this.checked"></td>
-    <td>${x.datum.slice(5)}<br><span class="small">${esc(x.oms.slice(0,44))}</span>${x.dup?'<br><span class="badge">al geïmporteerd</span>':''}${x.skipWhy?`<br><span class="badge warn">${x.skipWhy}</span>`:''}</td>
+    <td>${x.datum.slice(5)}<br><span class="small">${esc(x.oms.slice(0,44))}</span>${x.dup?'<br><span class="badge">al geïmporteerd</span>':''}${x.skipWhy?`<br><span class="badge warn">${x.skipWhy}</span>`:''}${x.autoSplit?'<br><span class="badge">auto-split</span>':''}</td>
     <td class="num ${x.bedrag<0?'':'pos'}">${fmt(x.bedrag)}</td>
     <td><button style="padding:4px 8px;font-size:13px" onclick="impPick(${i})">${x.code?`${x.code}`:'❓ 9999'}</button></td></tr>`).join('');
   $('#impCard').innerHTML=`<h2>Controle · ${nieuw.length} nieuw, ${it.filter(x=>x.dup).length} dubbel, ${it.filter(x=>x.skip&&!x.dup).length} overgeslagen</h2>
@@ -758,7 +807,7 @@ async function impPost(){
   try{
     const rows=importCtx.items.filter(x=>!x.dup&&!x.skip).map(x=>({
       datum:x.datum, omschrijving:x.oms, bedrag:x.bedrag, code:x.code||9999, obPct:'', obBedrag:'',
-      status:x.code?(impMode==='bank'?'Bank':'CC'):'Te coderen', importId:x.id, link:''}));
+      status:x.status||(x.code?(impMode==='bank'?'Bank':'CC'):'Te coderen'), importId:x.id, link:''}));
     if(!rows.length) throw new Error('Niets te boeken');
     const out=await api('addTransactions',{rows});
     toast(`✓ ${out.toegevoegd} geboekt, ${out.overgeslagen} overgeslagen`); importCtx=null;
