@@ -634,6 +634,7 @@ function choosePick(c){
   closePicker();
   if(pickerTarget?.startsWith('m')&&curView==='invoer'&&invMode==='memo'){ keepMemo(); memoRows[Number(pickerTarget.slice(1))].code=c; render(); }
   if(pickerTarget==='tcCode') tcApply();
+  if(pickerTarget==='bonUploadCode'&&bonUpload?.data){ bonUpload.data.code=c; render(); }
 }
 
 /* ── VIEW: IMPORT (CSV bank & creditcard) ───────────────────── */
@@ -846,8 +847,12 @@ function bonUploadCard(){
   const zekerWarn = d.zekerheid==='laag' ? '<p class="msg warn">⚠️ Lage zekerheid — check het bedrag/de gegevens even.</p>' : '';
   return `<div class="card">
     <h2>Nieuwe bon — controleren</h2>
-    <p class="small">${esc(d.leverancier||'onbekend')} — ${d.valuta} ${d.bedrag!=null?d.bedrag.toFixed(2):'?'} (${d.datum})</p>
-    <p class="small">Categorie: ${esc(d.categorie)} · ${esc(d.omschrijving||'')}</p>
+    <p class="small">${esc(d.leverancier||'onbekend')} — ${d.bedrag!=null?d.bedrag.toFixed(2):'?'} (${d.datum})</p>
+    <label class="field-label mt">Valuta</label>
+    <div class="seg">${['XCG','USD'].map(v=>`<button class="${d.valuta===v?'on':''}" onclick="bonUpload.data.valuta='${v}';render()">${v}</button>`).join('')}</div>
+    <label class="field-label mt">Rekening (categorie)</label>
+    ${pickerBtn('bonUploadCode', null, d.code)}
+    <p class="small">${esc(d.omschrijving||'')}</p>
     ${zekerWarn}
     <label class="field-label mt">Betaald met</label>
     <div class="seg" style="flex-wrap:wrap">${d.cards.map(c=>`<button class="${kaart===c?'on':''}" onclick="bonUpload.kaart='${esc(c)}';render()">${esc(c)}</button>`).join('')}</div>
@@ -863,7 +868,8 @@ async function bonUploadConfirm(){
     const d=bonUpload.data;
     await api('boekBon',{
       bonId: 'PWA'+Date.now(), datum:d.datum, leverancier:d.leverancier, omschrijving:d.omschrijving,
-      bedrag:d.bedrag, valuta:d.valuta, categorie:d.categorie, kaart:bonUpload.kaart, fotoUrl:d.fotoUrl,
+      bedrag:d.bedrag, valuta:d.valuta, categorie:d.categorie, code:d.code,
+      kaart:bonUpload.kaart, fotoUrl:d.fotoUrl,
     });
     toast('Bon geboekt ✓'); bonUpload=null; refresh();
   }catch(e){ $('#bonUploadMsg').innerHTML=`<div class="msg err">${esc(e.message)}</div>`; }
@@ -879,7 +885,12 @@ function vBonnen(){
   $('#view').innerHTML=`<div class="card">
   <h2>Bonnen · ${openBonnen().length} open</h2>
   <label>Foto van een bon(netje)</label>
-  <input type="file" accept="image/*" capture="environment" onchange="bonUploadFile(this.files[0])">
+  <div class="row">
+    <button onclick="$('#bonCam').click()">📸 Foto maken</button>
+    <button onclick="$('#bonLib').click()">🖼️ Kies bestaande foto</button>
+  </div>
+  <input id="bonCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="bonUploadFile(this.files[0])">
+  <input id="bonLib" type="file" accept="image/*" style="display:none" onchange="bonUploadFile(this.files[0])">
   ${bonnen.length?'':'<p class="small mt">Nog geen bonnen.</p>'}
   ${bonnen.map(b=>{
     const [datum,oms,bedrag,foto,sug,status,id,kop]=b;
