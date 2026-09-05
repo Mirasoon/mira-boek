@@ -1149,7 +1149,12 @@ function vAfsluiting(){
 let tcTarget=null;
 function vCoderen(){
   const items=(D.transacties||[]).map((r,i)=>({r,i})).filter(({r})=>(r[3]===''||Number(r[3])===9999)&&!String(r[6]).startsWith('Vervangen')).reverse();
+  // Coderingsregels draaien alleen tijdens de import. Voeg je er later een toe (of verandert
+  // MCB een tenaamstelling, zoals AQUALECTRA NV -> AQUALECTRA N.V), dan blijven bestaande
+  // rijen op 9999 staan. Deze knop laat de regels alsnog over wat er ligt lopen.
+  const treffers=items.map(({r})=>({r, code:matchRule(String(r[1]||''))})).filter(x=>x.code&&x.code!==9999);
   $('#meerBody').innerHTML=`<div class="card"><h2>Te coderen (9999) · ${items.length}</h2>
+  ${items.length?`<button ${treffers.length?'':'disabled'} onclick="tcRegelsToepassen()">🤖 ${treffers.length} van deze ${items.length} matchen een regel — nu coderen</button>`:''}
   ${items.length?'':'<p class="small">Niets te coderen 🎉</p>'}
   ${items.map(({r})=>`<div class="list-item"><div class="grow">
     <div class="t">${esc(r[1])}</div><div class="d">${String(r[0]).slice(0,10)} · ${esc(String(r[7]).slice(0,26))}…</div>
@@ -1157,6 +1162,20 @@ function vCoderen(){
     <div class="amount">${fmt(Number(r[2])||0)}</div></div>`).join('')}</div>`;
 }
 function tcOpen(importId){ tcTarget=importId; delete picked.tcCode; openPicker('tcCode'); }
+async function tcRegelsToepassen(){
+  const items=(D.transacties||[]).filter(r=>(r[3]===''||Number(r[3])===9999)&&!String(r[6]).startsWith('Vervangen'));
+  const treffers=items.map(r=>({r, code:matchRule(String(r[1]||''))})).filter(x=>x.code&&x.code!==9999);
+  if(!treffers.length) return;
+  const lijst=treffers.slice(0,12).map(t=>`${String(t.r[0]).slice(5,10)} ${fmt(Number(t.r[2])||0)} ${String(t.r[1]).slice(0,28)} → ${t.code} ${nameOf(t.code)}`).join('\n');
+  if(!confirm(`${treffers.length} regels coderen?\n\n${lijst}${treffers.length>12?`\n… en nog ${treffers.length-12}`:''}`)) return;
+  let n=0, fout=0;
+  for(const t of treffers){
+    try{ await api('setCode',{importId:String(t.r[7]), code:t.code, status:'Gecodeerd (regel)'}); n++; }
+    catch(e){ fout++; }
+  }
+  toast(`${n} gecodeerd${fout?`, ${fout} mislukt`:''} ✓`, 4000);
+  refresh();
+}
 async function tcApply(){
   const code=picked.tcCode; delete picked.tcCode;
   if(!code||!tcTarget) return;
