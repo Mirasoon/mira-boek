@@ -1057,22 +1057,24 @@ function vObAangifte(){
     const pct=tariefVoor(code, '');
     const bucket=(pct===6||pct===9)?pct:0;
     omzet[bucket]=R2((omzet[bucket]||0)+bedrag);
-    // Memoriaal-omzet draagt nooit apart OB af (geen 1641/1642-boeking erbij), dus geen obVerkoop-effect.
   });
-  const omzetTotaal=R2(omzet[0]+omzet[6]+omzet[9]);
-  const verschuldigd6=obVerkoop[6], verschuldigd9=obVerkoop[9], verschuldigdTotaal=R2(verschuldigd6+verschuldigd9);
 
-  // Aftrek/verrekening deze periode: alle Memoriaal-boekingen op 1641/1642 (bv. OB-import-
-  // verrekening CCS-facturen). Present-termen: negatief bedrag op deze rekening = minder OB
-  // te betalen = aftrek. Alleen als voorstel voor het invulveld hieronder — jij vult het
-  // uiteindelijke aftrekbedrag voor de aangifte zelf in.
+  // Memoriaal-boekingen op 1641/1642. Present-termen: positief = meer OB te betalen.
+  // Alleen [OB-import …] en [OB-aftrekrecht …] zijn aftrek. Al het andere hoort bij de
+  // verschuldigde OB: de OB-benen van Memoriaal-omzet (sportlessen via addDirectSale, [WEB~…])
+  // en OB-correcties. Die stonden eerst als negatieve aftrek, waardoor OB 6% te laag leek.
   let aftrekAuto=0;
   (D.memoriaal||[]).forEach(r=>{
     if(!inPeriode(r[0])) return;
     const code=Number(r[3]);
     if(code!==1641 && code!==1642) return;
-    aftrekAuto=R2(aftrekAuto-(Number(r[2])||0));
+    const bedrag=Number(r[2])||0;
+    if(/^\[OB-(import|aftrekrecht) /.test(String(r[1]||''))) aftrekAuto=R2(aftrekAuto-bedrag);
+    else if(code===1641) obVerkoop[6]=R2(obVerkoop[6]+bedrag);
+    else obVerkoop[9]=R2(obVerkoop[9]+bedrag);
   });
+  const omzetTotaal=R2(omzet[0]+omzet[6]+omzet[9]);
+  const verschuldigd6=obVerkoop[6], verschuldigd9=obVerkoop[9], verschuldigdTotaal=R2(verschuldigd6+verschuldigd9);
 
   const periodeLegs=legs(mFrom, mTo);
   const betaald=code=>R2(periodeLegs.filter(l=>l.code===code && l.bron==='bank').reduce((a,l)=>a+l.deb*sgn(code),0));
@@ -1097,10 +1099,9 @@ function vObAangifte(){
       <div class="kpi"><div class="l">OB 9%</div><div class="v">${fmt(verschuldigd9)}</div></div>
       <div class="kpi"><div class="l">Totaal</div><div class="v">${fmt(verschuldigdTotaal)}</div></div>
     </div>
-    <p class="small mt">Dit is de OB puur uit verkopen/facturen van deze maand, zonder aftrek.</p></div>
+    <p class="small mt">Dit is de OB uit verkopen, facturen en sportlessen van deze maand, zonder aftrek.</p></div>
   <div class="step"><h3>Aftrek / verrekening</h3>
-    <p class="small">Voorstel op basis van Memoriaal-correcties op 1641/1642 deze maand (bv. OB-import-
-    verrekening CCS-facturen): <b>${fmt(aftrekAuto)}</b>. Vul hieronder het bedrag in dat je op de
+    <p class="small">Voorstel op basis van OB-import en OB-aftrekrecht deze maand: <b>${fmt(aftrekAuto)}</b>. Vul hieronder het bedrag in dat je op de
     aangifte als aftrek opgeeft — dit is een los invulveld, het past niets in de boekhouding aan.</p>
     <label>Aftrek voor de aangifte (ƒ)</label>
     <input type="number" step="0.01" id="obAftrekInput" inputmode="decimal" value="${aftrekAuto}">
