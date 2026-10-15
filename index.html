@@ -781,10 +781,43 @@ function impBuild(){
         return;
       }
     }
+    if(impMode==='bank' && !skip && bedrag<0 && isKorpodekoTermijn(oms)){
+      items.push({datum, oms, bedrag, id, dup:dup||existing.has(id+'-A'), skip, skipWhy, korpodeko:true});
+      return;
+    }
     const code=matchRule(oms);
     items.push({datum, oms, bedrag, code, id, dup, skip, skipWhy});
   });
-  importCtx.items=items; importCtx.stage='preview'; render();
+  importCtx.items=splitKorpodeko(items); importCtx.stage='preview'; render();
+}
+/* — auto-split Korpodeko-termijn (lening 0540-OL, annuïteit) — de bank boekt één bedrag, maar
+   dat is aflossing (1712) + rente (4901). Rente = jaarrente/12 × openstaande hoofdsom, dat is
+   het 1712-saldo op de dag vóór de betaling, min de aflossingen die eerder in dezelfde import
+   zitten. Een termijn die al ongesplitst (zonder -A) geïmporteerd is, telt als dubbel. */
+const isKorpodekoTermijn = oms => /KORPODEKO/i.test(oms) && /0540-OL/i.test(oms) && !/PROVISIE/i.test(oms);
+function splitKorpodeko(items){
+  const pct=Number((D.instellingen||{}).KORPODEKO_RENTE)||8;
+  const dagVoor=d=>{ const t=new Date(d+'T12:00:00Z'); t.setUTCDate(t.getUTCDate()-1); return t.toISOString().slice(0,10); };
+  const kp=items.filter(x=>x.korpodeko&&!x.dup&&!x.skip).sort((a,b)=>a.datum<b.datum?-1:1);
+  const split={}; let eerderAfgelost=0;
+  kp.forEach(x=>{
+    const hoofdsom=R2((saldi(dagVoor(x.datum))[1712]||0)-eerderAfgelost);
+    const rente=R2(hoofdsom*pct/100/12), afl=R2(-x.bedrag-rente);
+    if(hoofdsom<=0 || afl<=0) return;  // klopt niet: dan gewoon als één regel op de regel laten staan
+    eerderAfgelost=R2(eerderAfgelost+afl);
+    split[x.id]={hoofdsom, rente, afl};
+  });
+  const out=[];
+  items.forEach(x=>{
+    const s=split[x.id];
+    if(!x.korpodeko){ out.push(x); return; }
+    if(!s){ const {korpodeko, ...rest}=x; out.push({...rest, code:matchRule(x.oms)}); return; }
+    out.push({datum:x.datum, oms:`Aflossing lening Korpodeko (0540-OL) — ${x.oms}`, bedrag:-s.afl, code:1712,
+      id:x.id+'-A', dup:false, skip:false, skipWhy:'', status:'Gecodeerd (aflossing)', autoSplit:true});
+    out.push({datum:x.datum, oms:`Rente lening Korpodeko (${pct}%/jr over hoofdsom ${fmt(s.hoofdsom).replace(/[^\d.,]/g,'')}) — ${x.oms}`, bedrag:-s.rente, code:4901,
+      id:x.id+'-R', dup:false, skip:false, skipWhy:'', status:'Gecodeerd (rente)', autoSplit:true});
+  });
+  return out;
 }
 function impStepPreview(){
   const it=importCtx.items;
